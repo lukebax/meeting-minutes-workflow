@@ -2,7 +2,7 @@
 
 Research date: 2026-06-12
 
-This document records first-pass implementation research for the v1 workflow. It is not a final implementation spec; use it as background for the current transcript-only implementation and remaining technical spikes.
+This document records implementation research for the v1 workflow. It is not a final implementation spec; use it as background for the current transcript and Apple Silicon audio implementation.
 
 ## Local Environment Observed
 
@@ -33,16 +33,16 @@ Python 3.14 is very new relative to many ML/audio packages. During implementatio
 
 ## Recommendation Summary
 
-For the first implementation:
+Current implementation direction:
 
 - Use a standard Python package with `pyproject.toml` and `src/` layout.
 - Use `argparse` initially unless CLI complexity grows.
 - Use `pytest` configured in `pyproject.toml`.
-- Use Mammoth for `.docx` transcript text extraction.
+- Use Mammoth for `.docx` transcript text extraction, with a minimal standard-library fallback only as defensive resilience.
 - Use a small custom parser for `.vtt` extraction first, backed by tests.
 - Use Pandoc for Markdown-to-`.docx` export.
-- Treat `faster-whisper` as the leading local transcription candidate.
-- Build transcript-only v1 first; add audio transcription after the deterministic workflow is solid.
+- Use WhisperKit CLI as the local audio transcription path for this Apple Silicon team.
+- Keep large transcription model files in user-level tool caches, not in the repository or `.venv`.
 
 ## Python Project Shape
 
@@ -50,7 +50,7 @@ Use `pyproject.toml` as the project configuration file. The Python Packaging Use
 
 Use `src/meeting_minutes_workflow/` rather than a flat package. The PyPA guide notes that `src/` layout helps avoid accidentally importing code directly from the repository root rather than from the installed package.
 
-Suggested starting structure:
+Implemented package structure:
 
 ```text
 pyproject.toml
@@ -58,20 +58,20 @@ src/
   meeting_minutes_workflow/
     __init__.py
     __main__.py
+    audio.py
     cli.py
-    paths.py
+    combined.py
+    commands.py
+    doctor.py
     run_metadata.py
-    inputs.py
+    validation.py
+    workflow.py
     extractors/
       __init__.py
-      txt.py
-      markdown.py
-      vtt.py
-      docx.py
     export/
       __init__.py
+      docx_tables.py
       pandoc.py
-    validation.py
 tests/
 ```
 
@@ -82,16 +82,17 @@ Use a console script entry point in `pyproject.toml`, for example:
 meeting-minutes = "meeting_minutes_workflow.cli:main"
 ```
 
-Conceptual subcommands:
+Implemented subcommands:
 
-- `meeting-minutes setup`
 - `meeting-minutes doctor`
 - `meeting-minutes prepare-run --title "..."`
+- `meeting-minutes validate-transcript <run-folder>`
 - `meeting-minutes validate-markdown <run-folder>`
+- `meeting-minutes assemble-combined <run-folder>`
 - `meeting-minutes export-docx <run-folder>`
 - `meeting-minutes finish-run <run-folder>`
 
-The exact command names can change during implementation. The key design point is that Codex can orchestrate deterministic Python commands between LLM file-writing steps.
+There is no single fully automated `run` command in v1. Codex orchestrates these deterministic Python commands between LLM file-writing steps.
 
 ## Transcript Input Extraction
 
@@ -128,7 +129,7 @@ The W3C WebVTT examples confirm that cue text can include voice spans such as `<
 
 ### `.docx`
 
-Prefer Mammoth for transcript extraction.
+Use Mammoth for transcript extraction.
 
 Rationale:
 
@@ -136,9 +137,9 @@ Rationale:
 - The project needs transcript text, not fine Word styling.
 - Mammoth is pip-installable and focused on converting/extracting from `.docx`.
 
-`python-docx` remains a fallback candidate. It is good for creating/updating Word documents and can read paragraphs/tables, but raw transcript extraction would require more manual traversal.
+The current implementation falls back to direct `.docx` XML paragraph extraction from the Python standard library only if Mammoth is not available in the environment. `python-docx` remains another fallback candidate if real Teams exports need more structure-aware traversal.
 
-Current status: basic `.docx` extraction is implemented and covered by a small synthetic `.docx` test. It has not yet been validated against a real Teams-style `.docx` transcript export. Do not block the audio transcription spike on that missing sample; keep real Teams `.docx` validation as a follow-up when a representative file is available.
+Current status: Mammoth is a normal project dependency in `pyproject.toml` and is installed in the project `.venv`. Basic `.docx` extraction is implemented and covered by small synthetic `.docx` tests. Real Teams-style `.docx` transcript validation remains a follow-up when a representative file is available.
 
 ## Canonical Transcript
 
@@ -193,35 +194,89 @@ Do not attempt deep Word rendering validation in v1.
 
 ## Local Audio Transcription
 
-### Leading Candidate: `faster-whisper`
+### Recommended Candidate for This Team: WhisperKit CLI
 
-Treat `faster-whisper` as the leading candidate for the audio spike.
+Treat WhisperKit CLI as the recommended transcription path for this team's v1 audio workflow.
 
 Reasons:
 
-- It is Python-first, which fits this project.
-- It reimplements Whisper using CTranslate2.
-- Its README claims up to 4x faster inference than `openai/whisper` for the same accuracy, with lower memory usage.
-- It supports CPU and GPU modes.
-- Its usage is straightforward from Python:
+- All intended users are on relatively modern Apple Silicon Macs.
+- It is Apple-native and can use Apple compute units, including Neural Engine-oriented defaults.
+- MacWhisper's fast local model options are also WhisperKit/Apple-native, so this path matches the observed performance profile better than CPU-only transcription.
+- It is installed as a normal Homebrew command-line tool, outside the repository and outside Codex.
+- Models are stored in a persistent user-level folder, not in the repository.
+- The CLI supports common audio formats used by this workflow, including `.wav`, `.mp3`, `.m4a`, and `.flac`.
 
-```python
-from faster_whisper import WhisperModel
+Installed during spike:
 
-model = WhisperModel("large-v3", device="cpu", compute_type="int8")
-segments, info = model.transcribe("audio.mp3", beam_size=5)
+```text
+/opt/homebrew/bin/whisperkit-cli
 ```
 
-Important nuance: unlike `openai-whisper`, `faster-whisper` says system FFmpeg does not need to be installed because audio is decoded with PyAV, which bundles FFmpeg libraries. Keep `ffmpeg` checks as potentially useful for future media handling, but do not assume `ffmpeg` is required if `faster-whisper` is chosen.
+Persistent model folder used during spike:
 
-Model recommendation for the spike:
+```text
+~/Library/Application Support/WhisperKit/Models
+```
 
-- Start with `large-v3` because accuracy is the priority.
-- Force or default language to English where the API supports it.
-- Use CPU `int8` as the broad compatibility baseline.
-- Detect Apple Silicon and investigate whether a better local backend is warranted after baseline works.
+Model tested:
 
-Open question: Python 3.14 compatibility may be a practical blocker because `faster-whisper` depends on packages such as CTranslate2, PyAV, ONNX Runtime, tokenizers, and Hugging Face Hub. Validate installability in `.venv` before committing.
+```text
+large-v3-v20240930_turbo
+```
+
+Direct CLI shape used during spike:
+
+```text
+whisperkit-cli transcribe \
+  --audio-path input/test_audio.m4a \
+  --model-path "$HOME/Library/Application Support/WhisperKit/Models/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930_turbo" \
+  --language en
+```
+
+Performance observed on the user's M2 Pro MacBook Pro:
+
+- First 5 minute run, including first-use model setup: about 198 seconds.
+- Repeated 5 minute run using the installed model: about 17 seconds.
+- Full 33 minute 49 second `.m4a` recording using the installed model: about 100 seconds.
+- Temporary 30 second `.wav`, `.mp3`, and `.flac` excerpts generated from the same recording also transcribed successfully.
+- Raw transcript quality looked plausible for meeting use, though Codex cleanup is still needed for punctuation, names, acronyms, and lightly cleaned transcript formatting.
+
+This performance is much closer to MacWhisper than the earlier CPU-only `faster-whisper` spike and is the current preferred implementation path.
+
+### Earlier Baseline: `faster-whisper`
+
+`faster-whisper` was tested first because it is Python-native and portable, but it should not be the v1 default for this Apple Silicon team unless WhisperKit later proves unsuitable.
+
+Spike update, 2026-06-13:
+
+- `faster-whisper==1.2.1` installed successfully in a temporary Python 3.14.5 virtual environment on this Apple Silicon machine.
+- Installed native dependencies included `ctranslate2==4.8.0`, `av==17.1.0`, `onnxruntime==1.26.0`, `tokenizers==0.23.1`, and `numpy==2.4.6`.
+- Import checks passed for `faster_whisper`, CTranslate2, PyAV, and ONNX Runtime.
+- A `tiny.en` model downloaded to `/private/tmp` and loaded successfully with `device="cpu"` and `compute_type="int8"`.
+- The temporary Python environment used about 228 MiB. The downloaded `tiny.en` model used about 74 MiB.
+- A local synthetic speech attempt using macOS `say` produced empty audio containers in this environment, so transcription quality has not yet been tested.
+- The `large-v3` model downloaded and loaded successfully with `device="cpu"` and `compute_type="int8"`. It is cached under the normal Hugging Face user cache at `~/.cache/huggingface/hub` and uses about 2.9 GiB.
+- A real 33 minute 49 second `.m4a` recording was available for testing. A one-minute excerpt transcribed successfully in about 26 seconds and produced plausible meeting text.
+- A five-minute excerpt transcribed successfully in about 139 seconds and produced 36 timestamped transcript lines.
+- A full-file single-call transcription was attempted, but it produced no progress output for many minutes and was interrupted after it had reached roughly the first 15 minutes of audio. The underlying transcription worked, but the integration should write incrementally and report progress rather than making one long silent call.
+- Raw transcription quality was plausible for meeting use, but imperfect on names, acronyms, and unclear phrases. The existing Codex Transcript cleanup step remains necessary before summary outputs are generated.
+
+Model metadata checked through Hugging Face on 2026-06-13:
+
+| Model | Approximate download size |
+|---|---:|
+| `Systran/faster-whisper-tiny.en` | 75 MiB |
+| `Systran/faster-whisper-base.en` | 141 MiB |
+| `Systran/faster-whisper-small.en` | 464 MiB |
+| `Systran/faster-whisper-medium.en` | 1.4 GiB |
+| `Systran/faster-whisper-large-v3` | 2.9 GiB |
+
+Accuracy should still be prioritized over speed for real meeting use, but Apple-native acceleration is now a requirement for practical runtime on long meetings.
+
+Implementation update: WhisperKit CLI is integrated into `prepare-run` for supported audio source material. The helper writes `.work/extracted-transcript.txt`, records engine, model, model path, and elapsed seconds in `run.json`, and prints elapsed-time progress while transcription is running.
+
+Next audio validation step: run the full workflow end to end from an audio recording through Markdown and Word outputs. Do not commit recordings or generated transcripts from real meetings.
 
 ### Alternatives
 
@@ -255,7 +310,7 @@ Cons:
 - Setup/build/binary management may be more involved.
 - Python orchestration would likely shell out to a binary rather than use a clean Python API.
 
-Use as fallback if `faster-whisper` installability or performance is poor.
+Use as fallback if WhisperKit CLI proves unsuitable on the target Apple Silicon machines.
 
 #### MLX Whisper
 
@@ -265,16 +320,14 @@ Pros:
 
 Cons:
 
-- Apple-specific, which may conflict with colleague-machine variability.
-- Should not be the only v1 path unless all intended users are on compatible Macs.
+- Apple-specific, like the chosen WhisperKit direction.
+- Adds another model/runtime family to set up and document.
 
-Consider as a later optimization, not the v1 baseline.
+Consider only if WhisperKit CLI stops meeting the team's accuracy or speed needs.
 
 ## Audio Format Support
 
-Do not document promised audio extensions until after the transcription spike.
-
-If `faster-whisper` is adopted, supported input formats are likely governed by PyAV/FFmpeg decoding support. The user guide should still list a small recommended set after validation, for example `.mp3`, `.m4a`, and `.wav`, while saying unsupported formats fail clearly.
+WhisperKit CLI documents support for `.wav`, `.mp3`, `.m4a`, and `.flac`. The workflow supports those formats in v1. A real `.m4a` recording and temporary `.wav`, `.mp3`, and `.flac` excerpts have been smoke-tested successfully.
 
 ## Setup and Doctor
 
@@ -290,17 +343,17 @@ Example:
 ```text
 Python environment: ready
 Transcript workflow: ready
-Audio transcription: not ready - model not downloaded
+Audio transcription: not ready - WhisperKit CLI found, model not found at the configured model path
 Word export: not ready - pandoc not found
 ```
 
-Setup should:
+First-time setup should:
 
 - create `.venv`
 - install project dependencies
 - run `doctor`
 - offer to install Pandoc if missing
-- later offer to download the transcription model if audio support is being set up
+- offer to install `whisperkit-cli` and prepare the WhisperKit Large v3 Turbo model if audio support is being set up
 
 Do not silently install system-level tools.
 
@@ -314,7 +367,7 @@ Create tests before or alongside implementation for:
 - `.vtt` timestamp removal
 - `.vtt` voice span preservation
 - `.vtt` obvious duplicate removal
-- Mammoth `.docx` extraction with a small fixture
+- `.docx` extraction with a small fixture
 - output folder naming and numbering
 - source hash calculation
 - run metadata writes and status transitions
@@ -322,35 +375,34 @@ Create tests before or alongside implementation for:
 - Markdown file validation
 - Pandoc missing produces a clear doctor failure
 - Pandoc export creates non-empty `.docx` when Pandoc is available
+- audio source material invokes WhisperKit CLI and writes `.work/extracted-transcript.txt`
+- audio transcription metadata is recorded in `run.json`
+- failed audio transcription writes a failed `run.json` without claiming generated transcript files
 
 Keep Pandoc-dependent tests isolated from the local machine state. Unit tests should be able to fake Pandoc; any real Pandoc smoke checks should skip clearly when Pandoc is not installed.
 
 ## Implementation Status Notes
 
-As of the first transcript-only implementation pass:
+As of the current implementation pass:
 
 - `pyproject.toml` and the `src/` package layout exist.
-- Deterministic helpers exist for input discovery, output folder numbering, source hashing, transcript extraction, validation, combined-output assembly, Word export, `doctor`, and `run.json`.
+- Deterministic helpers exist for input discovery, output folder numbering, source hashing, transcript extraction, local WhisperKit audio transcription, validation, combined-output assembly, Word export, `doctor`, and `run.json`.
 - The command runbook lives in [RUNBOOK.md](./RUNBOOK.md).
-- The transcript-only path has been proven end to end on a `.txt` transcript.
-- The transcript-only path has been proven end to end on a synthetic Teams-style `.vtt` transcript.
+- The transcript path has been proven end to end on a `.txt` transcript.
+- The transcript path has been proven end to end on a synthetic Teams-style `.vtt` transcript.
 - The `.vtt` extractor removes timestamp and metadata noise, preserves speaker labels, and now removes obvious rolling caption fragments while preserving genuine repeated statements.
 - Basic `.docx` extraction exists, but real Teams-style `.docx` transcript validation remains open until a real sample is available.
-- Audio transcription has not been implemented.
+- Audio transcription with WhisperKit CLI is implemented in `prepare-run` and has been tested on a real `.m4a` recording through working transcript extraction.
 
-## Decisions to Make After Spikes
+## Decisions and Follow-ups
 
-After additional transcript-format validation and the audio transcription spike:
-
-- Whether to adopt `faster-whisper` as the actual v1 transcription dependency.
-- Which Python version range to declare in `pyproject.toml`.
-- Which audio formats to officially support in `HOW_TO_USE.md`.
-- Whether `ffmpeg` remains a doctor dependency or only a nice-to-have diagnostic.
-- Whether Mammoth extraction is sufficient for real Teams `.docx` transcripts.
+- Whether the full audio workflow output quality is acceptable after Codex cleanup and summary generation.
+- Whether additional progress detail is needed for very long recordings.
+- Whether the current `.docx` extraction approach is sufficient for real Teams `.docx` transcripts when a sample is available.
 - Whether Pandoc output quality is acceptable without a reference `.docx`.
 
 ## Immediate Next Build Step
 
-Start the audio transcription spike. Begin by checking whether `faster-whisper` can be installed and run in the project environment, especially with the current Python 3.14 interpreter. If Python 3.14 compatibility blocks the spike, test a project-local environment on a more widely supported Python such as 3.12 or 3.13 before switching transcription tools.
+Run the full workflow end to end from a real audio recording through cleaned Transcript, summary Markdown, combined output, Word export, and final `run.json` status. Review the outputs for transcription cleanup quality, unsupported action/decision claims, and Word readability.
 
 Keep real Teams-style `.docx` transcript validation as a follow-up when a representative file is available.

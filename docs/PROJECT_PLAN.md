@@ -6,7 +6,7 @@ This plan consolidates the decisions made before implementation. It is a practic
 
 Build a Codex-run workflow that turns one English-language meeting recording or transcript into reviewable meeting outputs for non-technical colleagues.
 
-Current implementation status: the transcript-only path is implemented and tested for `.txt` and `.vtt` inputs. Basic `.docx` extraction is implemented and covered by a small synthetic test, but still needs validation against a real Teams-style `.docx` transcript when one becomes available. Audio transcription remains planned and is the next major technical spike.
+Current implementation status: the transcript path is implemented and tested for `.txt`, `.vtt`, and basic `.docx` inputs. `.docx` extraction uses Mammoth as a normal project dependency, with a minimal standard-library fallback only as defensive resilience. Real Teams-style `.docx` transcript validation is still needed when one becomes available. Audio source material is supported through local WhisperKit CLI transcription on Apple Silicon Macs, with the raw transcript written to the same hidden working transcript path used by transcript inputs.
 
 The user-facing flow should be:
 
@@ -67,9 +67,14 @@ v1 officially supports transcript source files in:
 - `.vtt`
 - `.docx`
 
-Unsupported transcript formats should fail with a clear message. There are no best-effort imports in v1.
+v1 officially supports meeting recordings in:
 
-Audio input is planned, but supported audio formats should be documented only after implementation research chooses the local transcription tool and media stack.
+- `.m4a`
+- `.mp3`
+- `.wav`
+- `.flac`
+
+Unsupported transcript and audio formats should fail with a clear message. There are no best-effort imports in v1.
 
 PDF transcript input, pasted transcript text, batching, and multiple source files are out of scope for v1.
 
@@ -77,13 +82,13 @@ PDF transcript input, pasted transcript text, batching, and multiple source file
 
 Codex is the orchestrator. Python provides deterministic helper commands.
 
-The operator checklist for running the current transcript-only workflow is in [RUNBOOK.md](./RUNBOOK.md).
+The operator checklist for running the current workflow is in [RUNBOOK.md](./RUNBOOK.md).
 
-Current transcript-only flow:
+Current flow:
 
 1. Check that `input/` contains exactly one supported source file.
 2. Create a new output folder using the run date and meeting title.
-3. If the source is a transcript file, extract plain working text.
+3. If the source is a transcript file, extract plain working text. If the source is a meeting recording, transcribe it locally with WhisperKit CLI.
 4. Store working artifacts under a hidden `.work/` area inside the run folder.
 5. Use Codex to create the canonical `markdown/transcript.md` from the working text.
 6. Validate the canonical Transcript has at least 10 words.
@@ -94,7 +99,7 @@ Current transcript-only flow:
 11. Validate expected `.docx` files exist and are non-empty.
 12. Write or update `run.json` with status, source metadata, generated files, and errors if any.
 
-Audio transcription will later add a local transcription step before Transcript cleanup.
+Audio transcription writes the same `.work/extracted-transcript.txt` file used by transcript extraction, so the Codex cleanup and summary workflow is shared across source material types.
 
 If the preferred output folder already exists, create a numbered folder such as `<name>-2` rather than overwriting or failing.
 
@@ -172,11 +177,13 @@ Use Python for v1, configured with `pyproject.toml`.
 
 Use a repo-local `.venv/` for Python dependencies. Do not commit `.venv/`.
 
-Use separate conceptual commands:
+Use deterministic helper commands that Codex can orchestrate:
 
-- setup: prepare project-local dependencies and guide larger downloads
-- doctor: report readiness
-- run: process one meeting
+- `doctor`: report readiness
+- `prepare-run`: create the run folder and extract or transcribe source material
+- validation, assembly, export, and finish commands for later stages
+
+A future setup helper may prepare project-local dependencies and guide larger downloads, but setup is currently documented as a Codex-assisted first-time step rather than an implemented command.
 
 Readiness should be reported separately for:
 
@@ -196,25 +203,24 @@ System-level tools, such as audio decoders and Pandoc, should be detected and ex
 
 Initial findings are recorded in [IMPLEMENTATION_RESEARCH.md](./IMPLEMENTATION_RESEARCH.md).
 
-First-pass recommendations:
+First-pass recommendations, with current status:
 
 - use `pyproject.toml` with `src/` layout
-- use Mammoth for `.docx` transcript extraction
+- use Mammoth for `.docx` transcript extraction, with a minimal standard-library fallback only as defensive resilience
 - use a tested custom `.vtt` parser first
 - use Pandoc for Markdown-to-`.docx` export
-- treat `faster-whisper` as the leading local transcription candidate
-- build the transcript-only path before audio transcription
+- build the transcript path before audio transcription
+- use WhisperKit CLI for local audio transcription on Apple Silicon Macs
 
-Validation spikes are still needed for:
+Validation follow-ups are still needed for:
 
-- Python version compatibility, especially because this machine currently has Python 3.14
-- `faster-whisper` installation and transcription quality
-- supported audio formats after the transcription tool is chosen
-- whether `ffmpeg` is required or only useful for future media handling
-- Mammoth extraction quality on real Teams `.docx` transcripts, when a real sample is available
+- `.docx` extraction quality on real Teams `.docx` transcripts, when a real sample is available
 - Pandoc installation and output quality on target machines
+- full workflow review from a real audio recording through Markdown and Word outputs
 
-Local transcription must prioritize accuracy over speed for short and long meetings. There is no fixed meeting-length limit.
+Initial audio spike findings: `faster-whisper` works but is too slow on CPU for this team's long-meeting use case. WhisperKit CLI is now the preferred audio path because the intended users are on Apple Silicon Macs. WhisperKit Large v3 Turbo transcribed a 33 minute 49 second `.m4a` recording in about 100 seconds after first-use setup, with plausible raw transcript quality. Full-file transcription should still report progress and write deterministic working text for Codex cleanup.
+
+Local transcription must prioritize accuracy while still using Apple-native acceleration so long meetings remain practical. There is no fixed meeting-length limit.
 
 ## Testing Plan
 
@@ -231,6 +237,8 @@ Start with deterministic tests:
 - `.vtt` extraction removes timestamps and preserves speaker labels
 - obvious `.vtt` subtitle duplication is removed where possible
 - `.docx` transcript extraction produces working text
+- audio source material invokes WhisperKit CLI and writes `.work/extracted-transcript.txt`
+- audio transcription metadata is recorded in `run.json`
 - canonical Transcript validation fails below 10 words
 - expected Markdown outputs are non-empty before Word export
 - Pandoc export creates expected non-empty `.docx` files
@@ -291,8 +299,7 @@ Prompt files are instruction files. `combined.md` is assembled deterministically
 
 ## Next Steps
 
-1. Run the audio transcription spike, starting with `faster-whisper` installability and a short local transcription test.
-2. Decide whether `faster-whisper` is viable for v1 or whether to compare `openai-whisper` or `whisper.cpp`.
-3. Document supported audio formats only after the chosen local transcription path has been validated.
-4. Add or document setup support for creating `.venv`, installing Python dependencies, and preparing any audio transcription dependencies from a clean checkout.
-5. Validate Mammoth extraction against a real Teams-style `.docx` transcript when one becomes available.
+1. Run the full workflow end to end on a real `.m4a` meeting recording and inspect the generated Markdown and Word outputs.
+2. Add or document setup support for installing `whisperkit-cli` with Homebrew and preparing the WhisperKit Large v3 Turbo model from a clean checkout.
+3. Validate `.docx` extraction against a real Teams-style `.docx` transcript when one becomes available.
+4. Consider whether speaker diarisation should be added after the core audio workflow is stable.

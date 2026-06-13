@@ -44,12 +44,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{display_label}: {status} - {readiness.detail}")
         return 0
     if args.command == "prepare-run":
-        result = prepare_transcript_run(
-            input_folder=args.input_folder,
-            outputs_folder=args.outputs_folder,
-            meeting_title=args.title,
-            run_date=args.run_date,
-        )
+        try:
+            result = prepare_transcript_run(
+                input_folder=args.input_folder,
+                outputs_folder=args.outputs_folder,
+                meeting_title=args.title,
+                run_date=args.run_date,
+            )
+        except Exception as error:
+            print(f"Error: {error}")
+            return 1
         print(result.run_folder)
         return 0
     if args.command == "validate-transcript":

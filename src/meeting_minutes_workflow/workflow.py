@@ -3,9 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from meeting_minutes_workflow.audio import (
+    SUPPORTED_AUDIO_EXTENSIONS,
+    TranscriptionResult,
+    transcribe_audio_with_whisperkit,
+)
 from meeting_minutes_workflow.extractors import SUPPORTED_TRANSCRIPT_EXTENSIONS, extract_transcript_text
 
 
@@ -21,6 +27,7 @@ def prepare_transcript_run(
     outputs_folder: Path,
     meeting_title: str,
     run_date: str,
+    audio_transcriber: Callable[[Path, Path], TranscriptionResult] = transcribe_audio_with_whisperkit,
 ) -> PreparedRun:
     source_file = _find_one_source_file(input_folder)
     run_folder = _next_run_folder(outputs_folder, run_date, meeting_title)
@@ -31,23 +38,44 @@ def prepare_transcript_run(
     markdown_folder.mkdir()
     docx_folder.mkdir()
 
-    extracted_text = extract_transcript_text(source_file)
-    (work_folder / "extracted-transcript.txt").write_text(extracted_text, encoding="utf-8")
+    extracted_transcript_path = work_folder / "extracted-transcript.txt"
+    source_kind = _source_kind(source_file)
+    metadata = {
+        "meeting_title": meeting_title,
+        "run_date": run_date,
+        "status": "incomplete",
+        "source": {
+            "filename": source_file.name,
+            "kind": source_kind,
+            "sha256": _sha256(source_file),
+        },
+        "generated_files": [],
+        "errors": [],
+    }
+    try:
+        transcription_metadata = None
+        if source_kind == "meeting_recording":
+            transcription_result = audio_transcriber(source_file, extracted_transcript_path)
+            transcription_metadata = {
+                "engine": transcription_result.engine,
+                "model": transcription_result.model,
+                "model_path": str(transcription_result.model_path),
+                "elapsed_seconds": transcription_result.elapsed_seconds,
+            }
+        else:
+            extracted_text = extract_transcript_text(source_file)
+            extracted_transcript_path.write_text(extracted_text, encoding="utf-8")
+        metadata["generated_files"] = [".work/extracted-transcript.txt"]
+        if transcription_metadata is not None:
+            metadata["transcription"] = transcription_metadata
+    except Exception as error:
+        metadata["status"] = "failed"
+        metadata["errors"] = [str(error)]
+        _write_run_metadata(run_folder / "run.json", metadata)
+        raise
     _write_run_metadata(
         run_folder / "run.json",
-        {
-            "meeting_title": meeting_title,
-            "run_date": run_date,
-            "status": "incomplete",
-            "source": {
-                "filename": source_file.name,
-                "sha256": _sha256(source_file),
-            },
-            "generated_files": [
-                ".work/extracted-transcript.txt",
-            ],
-            "errors": [],
-        },
+        metadata,
     )
     return PreparedRun(run_folder=run_folder, source_file=source_file)
 
@@ -61,9 +89,15 @@ def _find_one_source_file(input_folder: Path) -> Path:
     if len(source_files) != 1:
         raise ValueError(f"Expected exactly one source file in {input_folder}, found {len(source_files)}.")
     source_file = source_files[0]
-    if source_file.suffix.lower() not in SUPPORTED_TRANSCRIPT_EXTENSIONS:
+    if source_file.suffix.lower() not in SUPPORTED_TRANSCRIPT_EXTENSIONS | SUPPORTED_AUDIO_EXTENSIONS:
         raise ValueError(f"Unsupported source file extension: {source_file.suffix}")
     return source_file
+
+
+def _source_kind(source_file: Path) -> str:
+    if source_file.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS:
+        return "meeting_recording"
+    return "transcript"
 
 
 def _next_run_folder(outputs_folder: Path, run_date: str, meeting_title: str) -> Path:

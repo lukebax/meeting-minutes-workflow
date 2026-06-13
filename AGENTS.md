@@ -39,7 +39,7 @@ This repository is a Codex-run meeting minutes workflow. Before making changes, 
 - Use `pyproject.toml` for project configuration.
 - Use `pytest` for tests.
 - Prefer Pandoc for Markdown-to-`.docx` export unless implementation research finds a strong reason not to.
-- Prefer high-quality local transcription over speed.
+- Prefer high-quality local transcription that remains practical for long recordings on Apple Silicon Macs.
 - Report readiness separately for transcript workflows, audio transcription, and Word export.
 
 ## Testing Expectations

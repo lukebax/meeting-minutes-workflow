@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import stat
+import sys
+import types
 import zipfile
 from pathlib import Path
 
@@ -59,6 +62,21 @@ def test_docx_extraction_reads_paragraph_text(tmp_path: Path) -> None:
     assert extract_transcript_text(source) == "Alice opened the meeting.\n\nBob agreed to send the notes."
 
 
+def test_docx_extraction_prefers_mammoth_when_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "meeting.docx"
+    source.write_bytes(b"fake docx bytes")
+    calls: list[bytes] = []
+
+    def extract_raw_text(handle: object) -> object:
+        calls.append(handle.read())
+        return types.SimpleNamespace(value="Alice opened the meeting with Mammoth.\n")
+
+    monkeypatch.setitem(sys.modules, "mammoth", types.SimpleNamespace(extract_raw_text=extract_raw_text))
+
+    assert extract_transcript_text(source) == "Alice opened the meeting with Mammoth."
+    assert calls == [b"fake docx bytes"]
+
+
 def test_cli_doctor_reports_readiness(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = main(["doctor"])
 
@@ -93,6 +111,74 @@ def test_cli_prepare_run_creates_transcript_work_area(tmp_path: Path, capsys: py
     assert exit_code == 0
     assert str(outputs_folder / "2026-06-12-finance-planning") in output
     assert (outputs_folder / "2026-06-12-finance-planning" / ".work" / "extracted-transcript.txt").is_file()
+
+
+def test_cli_prepare_run_transcribes_audio_with_whisperkit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_folder = tmp_path / "input"
+    outputs_folder = tmp_path / "outputs"
+    fake_bin = tmp_path / "bin"
+    input_folder.mkdir()
+    outputs_folder.mkdir()
+    fake_bin.mkdir()
+    (input_folder / "meeting.m4a").write_bytes(b"fake audio")
+    fake_whisperkit = fake_bin / "whisperkit-cli"
+    fake_whisperkit.write_text(
+        """#!/bin/sh
+printf 'Alice: The audio helper produced a transcript.\\n'
+""",
+        encoding="utf-8",
+    )
+    fake_whisperkit.chmod(fake_whisperkit.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", str(fake_bin))
+
+    exit_code = main(
+        [
+            "prepare-run",
+            "--input-folder",
+            str(input_folder),
+            "--outputs-folder",
+            str(outputs_folder),
+            "--title",
+            "Audio Planning",
+            "--run-date",
+            "2026-06-12",
+        ]
+    )
+
+    run_folder = outputs_folder / "2026-06-12-audio-planning"
+    metadata = json.loads((run_folder / "run.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert (run_folder / ".work" / "extracted-transcript.txt").read_text(encoding="utf-8") == (
+        "Alice: The audio helper produced a transcript.\n"
+    )
+    assert metadata["source"]["kind"] == "meeting_recording"
+    assert metadata["transcription"]["engine"] == "whisperkit-cli"
+    assert metadata["transcription"]["model"] == "large-v3-v20240930_turbo"
+
+
+def test_cli_prepare_run_reports_prepare_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    input_folder = tmp_path / "input"
+    outputs_folder = tmp_path / "outputs"
+    input_folder.mkdir()
+    outputs_folder.mkdir()
+    (input_folder / "meeting.pdf").write_text("not supported", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "prepare-run",
+            "--input-folder",
+            str(input_folder),
+            "--outputs-folder",
+            str(outputs_folder),
+            "--title",
+            "Audio Planning",
+            "--run-date",
+            "2026-06-12",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "Error: Unsupported source file extension: .pdf" in capsys.readouterr().out
 
 
 def _write_minimal_docx(path: Path, paragraphs: list[str]) -> None:

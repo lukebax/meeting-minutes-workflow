@@ -1,10 +1,10 @@
 # How to Use This Workflow
 
-This guide describes the current transcript-only workflow. Audio transcription is planned but not implemented yet.
+This guide describes the current Codex-run workflow for transcript files and local audio transcription on Apple Silicon Macs.
 
 ## What this workflow does
 
-This workflow turns one transcript into reviewable meeting outputs:
+This workflow turns one transcript file or meeting recording into reviewable meeting outputs:
 
 - Transcript
 - Overview
@@ -23,7 +23,7 @@ Before the first run, open this project in Codex and copy this message into Code
 Please set up this meeting minutes workflow project so it is ready to run.
 ```
 
-Codex should check the local Python environment, install or use the project-local `.venv`, run the workflow tests, and check whether Pandoc is available for Word export. Pandoc is required for `.docx` files.
+Codex should check the local Python environment, install or use the project-local `.venv`, run the workflow tests, check whether Pandoc is available for Word export, and check whether WhisperKit audio transcription is ready. Pandoc is required for `.docx` files. WhisperKit CLI and the local model are required for meeting recordings.
 
 ## Before each run
 
@@ -36,7 +36,14 @@ Supported transcript formats for v1:
 - `.vtt`
 - `.docx`
 
-Supported audio formats will be documented once the local transcription tool is chosen.
+Supported audio formats for v1:
+
+- `.m4a`
+- `.mp3`
+- `.wav`
+- `.flac`
+
+Audio transcription uses local WhisperKit tooling on Apple Silicon Macs. The meeting recording is transcribed locally into a hidden working transcript before Codex creates the reviewable outputs.
 
 Do not use the `input` folder as a storage area. Keep it empty unless you are about to run the workflow. After the run is finished, remove your source file from `input` yourself.
 
@@ -61,7 +68,7 @@ Codex will then:
 
 1. Check the project is ready.
 2. Prepare a new workflow run folder.
-3. Extract the transcript into a hidden working file.
+3. Extract or locally transcribe the source material into a hidden working transcript.
 4. Create and validate the cleaned Transcript.
 5. Create the Overview, Minutes, Actions, Decisions, and Combined Markdown outputs.
 6. Validate the Markdown outputs.
@@ -109,7 +116,7 @@ The outputs are drafts. Check them before sharing, especially:
 ## Important notes
 
 - Audio files are never copied into the output folder.
-- Audio transcription is not ready yet.
+- Audio transcription happens locally with WhisperKit; the audio file is not sent to an LLM.
 - The transcript in the output folder is the transcript used for summarisation.
 - Actions may include unclear owners or due dates if the transcript did not confirm them.
 - Decisions are only listed when the transcript clearly supports them.

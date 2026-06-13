@@ -1,8 +1,8 @@
 # Meeting Minutes Workflow
 
-A Codex-run workflow for turning one transcript into draft meeting outputs for human review.
+A Codex-run workflow for turning one meeting recording or transcript into draft meeting outputs for human review.
 
-The transcript workflow produces:
+The workflow produces:
 
 - Transcript
 - Overview
@@ -15,9 +15,9 @@ Markdown is the canonical output format. Matching Word documents are exported fr
 
 ## Current Status
 
-The transcript-only workflow is implemented and covered by tests. It can prepare a workflow run, validate generated Markdown outputs, assemble the combined output, export Word files when Pandoc is installed, and mark a run as finished.
+Transcript inputs are implemented and covered by tests. Local audio transcription is implemented for Apple Silicon Macs using WhisperKit CLI. The workflow can prepare a workflow run, validate generated Markdown outputs, assemble the combined output, export Word files when Pandoc is installed, and mark a run as finished.
 
-Audio transcription is not implemented yet. Word export requires Pandoc to be installed on the machine.
+Word export requires Pandoc to be installed on the machine.
 
 ## User Guide
 

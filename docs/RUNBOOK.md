@@ -1,10 +1,10 @@
 # Codex Runbook
 
-This runbook is for Codex agents operating the transcript-only meeting minutes workflow. The user-facing instructions live in [HOW_TO_USE.md](../HOW_TO_USE.md).
+This runbook is for Codex agents operating the meeting minutes workflow. The user-facing instructions live in [HOW_TO_USE.md](../HOW_TO_USE.md).
 
 ## Scope
 
-This runbook covers the current v1 transcript workflow for one source file in `input/`.
+This runbook covers the current v1 workflow for one source file in `input/`.
 
 Supported transcript source formats:
 
@@ -13,7 +13,14 @@ Supported transcript source formats:
 - `.vtt`
 - `.docx`
 
-Audio transcription is not implemented yet. Do not process audio source material as part of this runbook.
+Supported audio source formats:
+
+- `.m4a`
+- `.mp3`
+- `.wav`
+- `.flac`
+
+Audio transcription uses local WhisperKit CLI on Apple Silicon Macs. Do not send audio source material to an LLM.
 
 ## Before Starting
 
@@ -27,7 +34,7 @@ Audio transcription is not implemented yet. Do not process audio source material
 .venv/bin/python -m pytest
 ```
 
-Proceed when transcript workflow readiness is ready and tests pass. Word export requires Pandoc readiness. If Pandoc is not ready, continue through Markdown validation but do not run `export-docx` or `finish-run`; report that Word export is blocked.
+Proceed when transcript workflow readiness is ready and tests pass. If the source material is a meeting recording, audio transcription readiness must also be ready before `prepare-run`. Word export requires Pandoc readiness. If Pandoc is not ready, continue through Markdown validation but do not run `export-docx` or `finish-run`; report that Word export is blocked.
 
 ## Run Sequence
 
@@ -39,7 +46,7 @@ Replace `{title}` with the user's Meeting Title.
 
 Use the run folder path printed by the command as `{run}` for all later steps.
 
-The command creates:
+For transcript source material, the command extracts plain text. For meeting recordings, it runs local WhisperKit transcription first. The command creates:
 
 ```text
 {run}/
@@ -48,6 +55,8 @@ The command creates:
   markdown/
   docx/
 ```
+
+If the source is a meeting recording, confirm `run.json` contains a `transcription` object with the engine, model, model path, and elapsed seconds.
 
 ## Generate Markdown Outputs
 
