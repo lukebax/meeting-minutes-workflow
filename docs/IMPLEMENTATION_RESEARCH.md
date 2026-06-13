@@ -138,6 +138,8 @@ Rationale:
 
 `python-docx` remains a fallback candidate. It is good for creating/updating Word documents and can read paragraphs/tables, but raw transcript extraction would require more manual traversal.
 
+Current status: basic `.docx` extraction is implemented and covered by a small synthetic `.docx` test. It has not yet been validated against a real Teams-style `.docx` transcript export. Do not block the audio transcription spike on that missing sample; keep real Teams `.docx` validation as a follow-up when a representative file is available.
+
 ## Canonical Transcript
 
 Do not use parser output directly as the canonical Transcript.
@@ -331,6 +333,9 @@ As of the first transcript-only implementation pass:
 - Deterministic helpers exist for input discovery, output folder numbering, source hashing, transcript extraction, validation, combined-output assembly, Word export, `doctor`, and `run.json`.
 - The command runbook lives in [RUNBOOK.md](./RUNBOOK.md).
 - The transcript-only path has been proven end to end on a `.txt` transcript.
+- The transcript-only path has been proven end to end on a synthetic Teams-style `.vtt` transcript.
+- The `.vtt` extractor removes timestamp and metadata noise, preserves speaker labels, and now removes obvious rolling caption fragments while preserving genuine repeated statements.
+- Basic `.docx` extraction exists, but real Teams-style `.docx` transcript validation remains open until a real sample is available.
 - Audio transcription has not been implemented.
 
 ## Decisions to Make After Spikes
@@ -346,4 +351,6 @@ After additional transcript-format validation and the audio transcription spike:
 
 ## Immediate Next Build Step
 
-Validate the transcript-only path against additional realistic source formats, especially `.vtt` and Teams-style `.docx` transcripts. Do audio transcription after the transcript-only path and Word export path are stable.
+Start the audio transcription spike. Begin by checking whether `faster-whisper` can be installed and run in the project environment, especially with the current Python 3.14 interpreter. If Python 3.14 compatibility blocks the spike, test a project-local environment on a more widely supported Python such as 3.12 or 3.13 before switching transcription tools.
+
+Keep real Teams-style `.docx` transcript validation as a follow-up when a representative file is available.

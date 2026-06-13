@@ -40,7 +40,10 @@ def _extract_vtt(vtt_text: str) -> str:
             cue_lines = cue_lines[1:]
         text = " ".join(line for line in cue_lines if "-->" not in line)
         text = _clean_vtt_markup(text)
-        if text and (not transcript_lines or transcript_lines[-1] != text):
+        if text:
+            if transcript_lines and _is_rolling_caption_fragment(transcript_lines[-1], text):
+                transcript_lines[-1] = text
+                continue
             transcript_lines.append(text)
     return "\n\n".join(transcript_lines)
 
@@ -60,6 +63,23 @@ def _clean_vtt_markup(text: str) -> str:
     if speaker and text:
         return f"{speaker}: {text}"
     return text
+
+
+def _is_rolling_caption_fragment(previous: str, current: str) -> bool:
+    previous_speaker, previous_text = _split_speaker_line(previous)
+    current_speaker, current_text = _split_speaker_line(current)
+    return (
+        previous_speaker == current_speaker
+        and previous_text != current_text
+        and current_text.startswith(previous_text)
+    )
+
+
+def _split_speaker_line(line: str) -> tuple[str | None, str]:
+    speaker, separator, text = line.partition(": ")
+    if not separator:
+        return None, line
+    return speaker, text
 
 
 def _extract_docx(source_file: Path) -> str:

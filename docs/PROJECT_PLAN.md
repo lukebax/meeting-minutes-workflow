@@ -6,7 +6,7 @@ This plan consolidates the decisions made before implementation. It is a practic
 
 Build a Codex-run workflow that turns one English-language meeting recording or transcript into reviewable meeting outputs for non-technical colleagues.
 
-Current implementation status: the transcript-only path is implemented and tested. Audio transcription remains planned.
+Current implementation status: the transcript-only path is implemented and tested for `.txt` and `.vtt` inputs. Basic `.docx` extraction is implemented and covered by a small synthetic test, but still needs validation against a real Teams-style `.docx` transcript when one becomes available. Audio transcription remains planned and is the next major technical spike.
 
 The user-facing flow should be:
 
@@ -211,7 +211,7 @@ Validation spikes are still needed for:
 - `faster-whisper` installation and transcription quality
 - supported audio formats after the transcription tool is chosen
 - whether `ffmpeg` is required or only useful for future media handling
-- Mammoth extraction quality on real Teams `.docx` transcripts
+- Mammoth extraction quality on real Teams `.docx` transcripts, when a real sample is available
 - Pandoc installation and output quality on target machines
 
 Local transcription must prioritize accuracy over speed for short and long meetings. There is no fixed meeting-length limit.
@@ -291,8 +291,8 @@ Prompt files are instruction files. `combined.md` is assembled deterministically
 
 ## Next Steps
 
-1. Test additional transcript formats, especially `.vtt` and real Teams-style `.docx` transcripts.
-2. Add or document setup support for creating `.venv` and installing Python dependencies from a clean checkout.
-3. Decide whether to keep the current Codex-run Markdown generation as v1 or add more automation around prompt execution.
-4. Research and integrate local audio transcription after the transcript-only path is stable across supported transcript formats.
-5. Publish the repository to GitHub when the transcript-only workflow, docs, and example-free Git hygiene are coherent.
+1. Run the audio transcription spike, starting with `faster-whisper` installability and a short local transcription test.
+2. Decide whether `faster-whisper` is viable for v1 or whether to compare `openai-whisper` or `whisper.cpp`.
+3. Document supported audio formats only after the chosen local transcription path has been validated.
+4. Add or document setup support for creating `.venv`, installing Python dependencies, and preparing any audio transcription dependencies from a clean checkout.
+5. Validate Mammoth extraction against a real Teams-style `.docx` transcript when one becomes available.

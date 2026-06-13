@@ -101,6 +101,36 @@ def test_vtt_extraction_removes_timestamps_and_preserves_voice_spans(tmp_path: P
     assert extract_transcript_text(source) == "Alice: We need to approve the budget.\n\nBob: Agreed, and I will send the update."
 
 
+def test_vtt_extraction_removes_rolling_caption_fragments_without_deleting_genuine_repetition(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.vtt"
+    source.write_text(
+        """WEBVTT
+
+00:00:00.000 --> 00:00:03.000
+<v Alice>We need
+
+00:00:00.000 --> 00:00:06.000
+<v Alice>We need to make sure
+
+00:00:00.000 --> 00:00:09.000
+<v Alice>We need to make sure rolling caption fragments do not get counted three times.
+
+00:00:20.000 --> 00:00:24.000
+<v Ben>Review notes are essential.
+
+00:00:40.000 --> 00:00:44.000
+<v Ben>Review notes are essential.
+""",
+        encoding="utf-8",
+    )
+
+    assert extract_transcript_text(source) == (
+        "Alice: We need to make sure rolling caption fragments do not get counted three times.\n\n"
+        "Ben: Review notes are essential.\n\n"
+        "Ben: Review notes are essential."
+    )
+
+
 def test_transcript_validation_requires_at_least_ten_words() -> None:
     with pytest.raises(ValueError, match="at least 10 words"):
         validate_transcript("# Transcript\n\nToo short.")
