@@ -1,0 +1,3 @@
+# Run Metadata File
+
+Each workflow run will include a small `run.json` file in its output folder recording metadata such as the meeting title, source filename, source file hash, run date, output folder, generated files, status, and any error summary. The metadata file is written for successful, incomplete, and failed runs. If the preferred output folder name already exists, the workflow will create a numbered folder rather than overwriting or failing. This gives future debugging and support a reliable machine-readable record without making the metadata part of the human-facing summary outputs.
