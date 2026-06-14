@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -11,6 +13,7 @@ from meeting_minutes_workflow.validation import EXPECTED_MARKDOWN_OUTPUTS
 
 
 Runner = Callable[[list[str]], None]
+EXPECTED_WORD_OUTPUTS = [filename.replace(".md", ".docx") for filename in EXPECTED_MARKDOWN_OUTPUTS]
 
 
 def export_markdown_to_word(
@@ -32,6 +35,46 @@ def export_run_markdown_to_word(run_folder: Path, *, runner: Runner | None = Non
         markdown_file = run_folder / "markdown" / markdown_filename
         docx_file = run_folder / "docx" / markdown_filename.replace(".md", ".docx")
         export_markdown_to_word(markdown_file, docx_file, reference_doc=reference_doc, runner=runner)
+    validate_word_outputs(run_folder / "docx")
+
+
+def validate_word_outputs(docx_folder: Path) -> None:
+    missing_or_empty = [
+        filename
+        for filename in EXPECTED_WORD_OUTPUTS
+        if not (docx_folder / filename).is_file() or (docx_folder / filename).stat().st_size == 0
+    ]
+    if missing_or_empty:
+        raise ValueError(f"Expected non-empty Word outputs: {', '.join(missing_or_empty)}")
+
+    unreadable_packages = [
+        filename
+        for filename in EXPECTED_WORD_OUTPUTS
+        if not zipfile.is_zipfile(docx_folder / filename)
+    ]
+    if unreadable_packages:
+        raise ValueError(f"Expected valid Word packages: {', '.join(unreadable_packages)}")
+
+    pandoc = shutil.which("pandoc")
+    if pandoc is None:
+        return
+
+    unreadable_by_pandoc: list[str] = []
+    for filename in EXPECTED_WORD_OUTPUTS:
+        docx_file = docx_folder / filename
+        result = subprocess.run(
+            [pandoc, "--from", "docx", "--to", "plain", str(docx_file)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            message = result.stderr.strip() or "Pandoc could not read the file."
+            unreadable_by_pandoc.append(f"{filename} ({message})")
+
+    if unreadable_by_pandoc:
+        raise ValueError(f"Expected Pandoc-readable Word outputs: {', '.join(unreadable_by_pandoc)}")
 
 
 def ensure_reference_doc() -> Path:

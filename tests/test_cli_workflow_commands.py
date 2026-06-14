@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from meeting_minutes_workflow.cli import main
-from meeting_minutes_workflow.validation import EXPECTED_DOCX_OUTPUTS, EXPECTED_MARKDOWN_OUTPUTS, validate_docx_outputs
+from meeting_minutes_workflow.export.word import EXPECTED_WORD_OUTPUTS, validate_word_outputs
+from meeting_minutes_workflow.validation import EXPECTED_MARKDOWN_OUTPUTS
 
 
 def test_cli_validate_transcript_accepts_canonical_transcript(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -136,6 +137,12 @@ def test_export_docx_uses_reference_docx_for_table_formatting(tmp_path: Path, mo
     run_folder = _make_run_folder(tmp_path)
     for filename in EXPECTED_MARKDOWN_OUTPUTS:
         (run_folder / "markdown" / filename).write_text(f"# {filename}\n\nReady.", encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_pandoc = fake_bin / "pandoc"
+    fake_pandoc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_pandoc.chmod(fake_pandoc.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", str(fake_bin))
     commands: list[list[str]] = []
 
     def fake_runner(command: list[str]) -> None:
@@ -216,11 +223,11 @@ def test_docx_validation_rejects_pandoc_unreadable_files(tmp_path: Path, monkeyp
     fake_pandoc.write_text("#!/bin/sh\nprintf 'could not read docx\\n' >&2\nexit 63\n", encoding="utf-8")
     fake_pandoc.chmod(fake_pandoc.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", str(fake_bin))
-    for filename in EXPECTED_DOCX_OUTPUTS:
+    for filename in EXPECTED_WORD_OUTPUTS:
         _write_docx_with_four_column_table(docx_folder / filename)
 
     with pytest.raises(ValueError, match="Pandoc-readable Word outputs"):
-        validate_docx_outputs(docx_folder)
+        validate_word_outputs(docx_folder)
 
 
 def _make_run_folder(tmp_path: Path) -> Path:

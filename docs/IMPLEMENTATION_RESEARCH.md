@@ -61,12 +61,11 @@ src/
     audio.py
     cli.py
     combined.py
-    commands.py
     doctor.py
     first_time_setup.py
     run_metadata.py
     setup_readiness.py
-    source_material.py
+    transcript_preparation.py
     validation.py
     workflow.py
     workflow_run.py
@@ -402,7 +401,7 @@ Keep Pandoc-dependent tests isolated from the local machine state. Unit tests sh
 As of the current implementation pass:
 
 - `pyproject.toml` and the `src/` package layout exist.
-- Deterministic helpers exist for Workflow Run layout, prepare metadata, and stage gates; typed Source Material intake; transcript extraction; local WhisperKit audio transcription; setup readiness; validation; combined-output assembly; Word export; `doctor`; and `run.json`.
+- Deterministic helpers exist for Workflow Run layout, prepare metadata, and stage gates; Transcript Preparation from Source Material; local WhisperKit audio transcription; setup readiness; validation; combined-output assembly; Word export; `doctor`; and `run.json`.
 - Readiness checks carry user-facing display labels with their readiness facts so setup and `doctor` do not duplicate label knowledge.
 - A first-time setup helper exists at `scripts/setup_project.py`, with package implementation in `meeting_minutes_workflow.first_time_setup`.
 - The command runbook lives in [RUNBOOK.md](./RUNBOOK.md).

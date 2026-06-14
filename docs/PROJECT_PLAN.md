@@ -290,7 +290,7 @@ LLM output quality should be guided by prompt files and reviewed manually at fir
   src/
     meeting_minutes_workflow/
       first_time_setup.py
-      source_material.py
+      transcript_preparation.py
       workflow_run.py
       setup_readiness.py
       run_metadata.py

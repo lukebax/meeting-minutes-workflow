@@ -1,20 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
-from meeting_minutes_workflow.commands import (
-    assemble_run_combined,
-    export_run_docx,
-    finish_run,
-    mark_run_failed,
-    validate_run_markdown,
-    validate_run_transcript,
-)
 from meeting_minutes_workflow.doctor import check_readiness
 from meeting_minutes_workflow.workflow import prepare_transcript_run
+from meeting_minutes_workflow.workflow_run import WorkflowStage, run_workflow_stage
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,23 +48,22 @@ def main(argv: list[str] | None = None) -> int:
         print(result.run_folder)
         return 0
     if args.command == "validate-transcript":
-        return _run_stage(args.run_folder, validate_run_transcript, "Transcript is valid.")
+        return _run_stage(args.run_folder, WorkflowStage.VALIDATE_TRANSCRIPT)
     if args.command == "validate-markdown":
-        return _run_stage(args.run_folder, validate_run_markdown, "Markdown outputs are valid.")
+        return _run_stage(args.run_folder, WorkflowStage.VALIDATE_MARKDOWN)
     if args.command == "export-docx":
-        return _run_stage(args.run_folder, export_run_docx, "Word outputs exported.")
+        return _run_stage(args.run_folder, WorkflowStage.EXPORT_DOCX)
     if args.command == "assemble-combined":
-        return _run_stage(args.run_folder, assemble_run_combined, "Combined output assembled.")
+        return _run_stage(args.run_folder, WorkflowStage.ASSEMBLE_COMBINED)
     if args.command == "finish-run":
-        return _run_stage(args.run_folder, finish_run, "Workflow run finished.")
+        return _run_stage(args.run_folder, WorkflowStage.FINISH_RUN)
     return 0
 
 
-def _run_stage(run_folder: Path, stage: Callable[[Path], None], success_message: str) -> int:
+def _run_stage(run_folder: Path, stage: WorkflowStage) -> int:
     try:
-        stage(run_folder)
+        success_message = run_workflow_stage(run_folder, stage)
     except Exception as error:
-        mark_run_failed(run_folder, error)
         print(f"Error: {error}")
         return 1
     print(success_message)

@@ -43,7 +43,7 @@ class SourceMaterial:
 
 
 @dataclass(frozen=True)
-class PreparedSourceMaterial:
+class PreparedTranscript:
     source: SourceMaterial
     transcription: TranscriptionMetadata | None
 
@@ -72,12 +72,12 @@ def find_source_material(input_folder: Path) -> SourceMaterial:
     )
 
 
-def prepare_source_material(
+def prepare_transcript(
     source: SourceMaterial,
     extracted_transcript_path: Path,
     *,
     audio_transcriber: AudioTranscriber = transcribe_audio_with_whisperkit,
-) -> PreparedSourceMaterial:
+) -> PreparedTranscript:
     if source.kind == SourceKind.MEETING_RECORDING:
         transcription_result = audio_transcriber(source.path, extracted_transcript_path)
         transcription = TranscriptionMetadata(
@@ -90,7 +90,7 @@ def prepare_source_material(
         extracted_text = extract_transcript_text(source.path)
         extracted_transcript_path.write_text(extracted_text, encoding="utf-8")
         transcription = None
-    return PreparedSourceMaterial(source=source, transcription=transcription)
+    return PreparedTranscript(source=source, transcription=transcription)
 
 
 def _sha256(path: Path) -> str:
