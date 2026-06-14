@@ -52,6 +52,8 @@ Install only the missing tools.
 
 Pandoc is required for Word export. WhisperKit CLI and the Large v3 Turbo model are required for meeting recordings. Transcript source material can still be processed without audio readiness.
 
+Audio readiness means the tools and model are installed. During an actual meeting recording run, Codex should still request approval before `prepare-run` so WhisperKit can use local macOS audio runtime services without a predictable first sandboxed failure.
+
 ## WhisperKit Model
 
 The expected model folder is:

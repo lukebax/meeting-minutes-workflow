@@ -290,7 +290,7 @@ Accuracy should still be prioritized over speed for real meeting use, but Apple-
 
 Implementation update: WhisperKit CLI is integrated into `prepare-run` for supported audio source material. The helper writes `.work/extracted-transcript.txt`, records engine, model, model path, and elapsed seconds in `run.json`, and prints elapsed-time progress while transcription is running.
 
-Operational note: in the Codex managed sandbox, WhisperKit may abort if Apple runtime cache writes under `~/Library/Caches/whisperkit-cli` are blocked. The workflow reports this as an actionable local cache-permission error. Rerunning `prepare-run` with approval for WhisperKit cache access resolves the issue without sending audio to an LLM.
+Operational note: in the Codex managed sandbox, WhisperKit may abort if Apple runtime cache writes under `~/Library/Caches/whisperkit-cli` are blocked or if the local macOS audio runtime cannot be reached from the sandboxed process. For meeting recordings, Codex should request approval before `prepare-run` so WhisperKit can use local WhisperKit/macOS audio runtime access on the first attempt. If the approval is missed, the workflow reports cache and Apple audio runtime failures with retry guidance, without sending audio to an LLM.
 
 Audio validation update, 2026-06-13: the full workflow ran successfully end to end from the real `.m4a` recording through cleaned Transcript, summary Markdown, combined output, Word export, and final `run.json` status. The raw WhisperKit transcript was plausible for meeting use after Codex cleanup. The main remaining audio limitation is the lack of speaker diarisation, so Actions and speaker-linked details must remain conservative when attribution is unclear.
 

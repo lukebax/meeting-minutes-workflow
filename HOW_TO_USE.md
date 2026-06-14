@@ -62,7 +62,7 @@ Supported audio formats for v1:
 
 Audio transcription uses local WhisperKit tooling on Apple Silicon Macs. The meeting recording is transcribed locally into a hidden working transcript before Codex creates the reviewable outputs.
 
-When Codex runs audio transcription, it may ask for approval to let WhisperKit write Apple runtime cache files under your normal user cache folder. Approve this for meeting recordings. This does not send the meeting recording to an LLM.
+When Codex runs audio transcription, it should ask for approval before the transcription step so WhisperKit can use the local macOS audio runtime. Approve this for meeting recordings. This does not send the meeting recording to an LLM.
 
 Do not use the `input` folder as a storage area. Keep it empty unless you are about to run the workflow. After the run is finished, remove your source file from `input` yourself.
 
@@ -77,6 +77,8 @@ Copy this message into Codex and replace the meeting title:
 ```text
 Please run the meeting minutes workflow using the file in the input folder.
 Meeting title: [replace this with your meeting title]
+
+If the file in the input folder is an audio recording, request approval before running prepare-run so WhisperKit can use the local macOS audio runtime. Do not send the audio file to an LLM.
 ```
 
 The meeting title should be short and clear, for example:

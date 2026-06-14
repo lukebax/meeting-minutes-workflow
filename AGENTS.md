@@ -25,6 +25,7 @@ This repository is a Codex-run meeting minutes workflow. Before making changes, 
 - Do not delete user source files.
 - Do not copy audio files into generated outputs.
 - Preserve only the canonical Transcript as a normal user-facing transcript output.
+- For meeting recording source material, request approval for local WhisperKit/macOS audio runtime access before running `prepare-run`; do not wait for an initial sandboxed transcription failure.
 
 ## Git Hygiene
 

@@ -41,6 +41,8 @@ Proceed when transcript workflow readiness is ready and tests pass. If the sourc
 
 Replace `{title}` with the user's Meeting Title.
 
+Before running `prepare-run`, identify whether the source file is transcript source material or a meeting recording. For meeting recordings, request approval for local WhisperKit/macOS audio runtime access and run `prepare-run` with that approval. This avoids a predictable first sandboxed WhisperKit failure. Do not request broad full access, and do not send audio source material to an LLM.
+
 ```bash
 .venv/bin/meeting-minutes prepare-run --title "{title}"
 ```
@@ -59,9 +61,7 @@ For transcript source material, the command extracts plain text. For meeting rec
 
 If the source is a meeting recording, confirm `run.json` contains a `transcription` object with the engine, model, model path, and elapsed seconds.
 
-When running inside Codex, WhisperKit may need approval to write Apple runtime cache files under `~/Library/Caches/whisperkit-cli`. If `prepare-run` reports that WhisperKit could not write its Apple runtime cache, rerun `prepare-run` with approval for WhisperKit cache access. This is local runtime cache access only; do not send the meeting recording to an LLM.
-
-Some Apple audio runtime failures can also be transient in Codex. If `prepare-run` reports a local Apple audio runtime failure, rerun `prepare-run` with approval for local WhisperKit/macOS audio runtime access. The failed workflow run folder is preserved for debugging, and the retry will create a new numbered folder.
+When running inside Codex, WhisperKit may need approval to write Apple runtime cache files under `~/Library/Caches/whisperkit-cli` and to use local macOS audio runtime services. If `prepare-run` still reports a WhisperKit cache or local Apple audio runtime failure, rerun `prepare-run` with approval for local WhisperKit/macOS audio runtime access. The failed workflow run folder is preserved for debugging, and the retry will create a new numbered folder.
 
 ## Generate Markdown Outputs
 
