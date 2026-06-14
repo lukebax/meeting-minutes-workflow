@@ -195,14 +195,16 @@ Implemented export command shape:
 pandoc --from gfm --to docx --standalone --reference-doc reference.docx input.md --output output.docx
 ```
 
-The Word export module generates a minimal reference `.docx` in the system temporary directory, converts action tables into Word-friendly action blocks for `.docx` only, and post-processes generated `.docx` files so bullet lists render visibly in Word. The Pandoc module is the local command adapter. Markdown remains canonical.
+The Word export module generates a minimal reference `.docx` in the system temporary directory and post-processes generated `.docx` files so bullet lists render visibly in Word, action tables keep stable widths, and Pandoc heading bookmarks are removed. The Pandoc module is the local command adapter. Markdown remains canonical.
 
 Validate after export:
 
 - expected `.docx` file exists
 - file size is greater than zero
+- file is a valid Word package
+- when Pandoc is available, Pandoc can read the `.docx` back
 
-Automated validation remains structural in v1. Manual review should inspect `docx/combined.docx` for obvious readability problems after real workflow runs.
+Manual review should still inspect `docx/combined.docx` for obvious readability problems after real workflow runs.
 
 ## Local Audio Transcription
 

@@ -61,6 +61,8 @@ If the source is a meeting recording, confirm `run.json` contains a `transcripti
 
 When running inside Codex, WhisperKit may need approval to write Apple runtime cache files under `~/Library/Caches/whisperkit-cli`. If `prepare-run` reports that WhisperKit could not write its Apple runtime cache, rerun `prepare-run` with approval for WhisperKit cache access. This is local runtime cache access only; do not send the meeting recording to an LLM.
 
+Some Apple audio runtime failures can also be transient in Codex. If `prepare-run` reports a local Apple audio runtime failure, rerun `prepare-run` with approval for local WhisperKit/macOS audio runtime access. The failed workflow run folder is preserved for debugging, and the retry will create a new numbered folder.
+
 ## Generate Markdown Outputs
 
 Codex first writes:
@@ -125,7 +127,7 @@ Run only when `doctor` reports Word export ready:
 
 The Markdown files remain canonical. Word files are convenience exports.
 
-For Word readability, action tables may be exported as action blocks in `.docx`. This does not change canonical `actions.md`.
+Action tables in Markdown should remain real tables in `.docx` exports. The export post-process removes Pandoc heading bookmarks so Word does not show grey bookmark brackets around headings.
 
 The export step validates that each `.docx` is a valid Word package and, when Pandoc is available, that Pandoc can read it back. If export or finish reports `Expected Pandoc-readable Word outputs`, rerun `export-docx` once after confirming Pandoc readiness. If the error repeats, inspect the named `.docx` file before reporting the run as complete.
 

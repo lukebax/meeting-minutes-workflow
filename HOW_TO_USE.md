@@ -98,6 +98,8 @@ Codex will then:
 
 If a run folder with the same date and meeting title already exists, Codex will create a numbered folder such as `2026-06-13-finance-planning-2`.
 
+If an audio transcription attempt fails and Codex retries, you may see one failed numbered folder and one later successful numbered folder. This is expected; failed folders are preserved so Codex can inspect what went wrong.
+
 For the next meeting, empty the `input` folder, put in the next source file, and start another new chat.
 
 ## Find the outputs

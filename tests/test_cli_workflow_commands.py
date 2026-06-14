@@ -193,6 +193,20 @@ def test_docx_optimisation_preserves_word_namespace_prefix(tmp_path: Path) -> No
     assert "ns0:" not in numbering_xml
 
 
+def test_docx_optimisation_removes_pandoc_heading_bookmarks(tmp_path: Path) -> None:
+    from meeting_minutes_workflow.export.docx_tables import optimise_docx_tables
+
+    docx_file = tmp_path / "bookmarks.docx"
+    _write_docx_with_heading_bookmark(docx_file)
+
+    optimise_docx_tables(docx_file)
+
+    document_xml = _read_docx_document_xml(docx_file)
+    assert "bookmarkStart" not in document_xml
+    assert "bookmarkEnd" not in document_xml
+    assert "<w:document" in document_xml
+
+
 def test_docx_validation_rejects_pandoc_unreadable_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     docx_folder = tmp_path / "docx"
     fake_bin = tmp_path / "bin"
@@ -275,6 +289,23 @@ def _write_docx_with_symbol_bullets(path: Path) -> None:
         archive.writestr("[Content_Types].xml", "")
         archive.writestr("word/document.xml", document_xml)
         archive.writestr("word/numbering.xml", numbering_xml)
+
+
+def _write_docx_with_heading_bookmark(path: Path) -> None:
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:bookmarkStart w:id="1" w:name="actions"/>
+      <w:r><w:t>Actions</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+  </w:body>
+</w:document>
+"""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "")
+        archive.writestr("word/document.xml", document_xml)
 
 
 def _read_docx_document_xml(path: Path) -> str:

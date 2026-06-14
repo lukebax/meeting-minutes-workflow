@@ -28,6 +28,12 @@ WHISPERKIT_CACHE_PERMISSION_HINT = (
     "In Codex, rerun prepare-run with approval for WhisperKit cache access. "
     "The meeting recording was not sent to an LLM and no transcript output was generated."
 )
+WHISPERKIT_APPLE_AUDIO_RUNTIME_HINT = (
+    "WhisperKit hit a local Apple audio runtime failure while reading the meeting recording. "
+    "In Codex, rerun prepare-run with approval for local WhisperKit/macOS audio runtime access. "
+    "The failed workflow run folder is preserved; a retry will create a new numbered run folder. "
+    "If the same error repeats, check that the recording opens normally or try converting it to .wav."
+)
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
@@ -120,6 +126,18 @@ def _whisperkit_error_message(error: subprocess.CalledProcessError) -> str:
     stderr = error.stderr if isinstance(error.stderr, str) else ""
     if "Library/Caches/whisperkit-cli" in stderr and "Operation not permitted" in stderr:
         return WHISPERKIT_CACHE_PERMISSION_HINT
+    if _is_apple_audio_runtime_failure(stderr):
+        return WHISPERKIT_APPLE_AUDIO_RUNTIME_HINT
     if stderr.strip():
         return f"WhisperKit transcription failed: {stderr.strip()}"
     return f"WhisperKit transcription failed with exit code {error.returncode}."
+
+
+def _is_apple_audio_runtime_failure(stderr: str) -> bool:
+    markers = [
+        "IOSurfaceSharedEventAddEventListener failed",
+        "com.apple.coreaudio.avfaudio",
+        "AVAudioFile setFramePosition",
+        "error 1718449215",
+    ]
+    return any(marker in stderr for marker in markers)

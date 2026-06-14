@@ -24,6 +24,8 @@ def optimise_docx_tables(docx_file: Path) -> None:
 
         root = ElementTree.fromstring(document_xml)
         changed = False
+        if _remove_bookmarks(root):
+            changed = True
         for table in root.findall(".//w:tbl", NS):
             if _column_count(table) == 4:
                 _set_table_widths(table, ACTION_TABLE_WIDTHS)
@@ -165,6 +167,17 @@ def _bullet_number_ids(entries: dict[str, bytes]) -> set[str]:
 def _is_bullet_level(level: ElementTree.Element) -> bool:
     number_format = level.find("w:numFmt", NS)
     return number_format is not None and number_format.get(f"{{{WORD_NS}}}val") == "bullet"
+
+
+def _remove_bookmarks(element: ElementTree.Element) -> bool:
+    changed = False
+    for child in list(element):
+        if child.tag in {f"{{{WORD_NS}}}bookmarkStart", f"{{{WORD_NS}}}bookmarkEnd"}:
+            element.remove(child)
+            changed = True
+        elif _remove_bookmarks(child):
+            changed = True
+    return changed
 
 
 def _child(parent: ElementTree.Element, tag: str, *, before: ElementTree.Element | None = None) -> ElementTree.Element:

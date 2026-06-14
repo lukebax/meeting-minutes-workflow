@@ -22,12 +22,7 @@ def export_markdown_to_word(
 ) -> None:
     if reference_doc is None:
         reference_doc = ensure_reference_doc()
-    export_source = _docx_ready_markdown(markdown_file)
-    try:
-        run_pandoc_to_docx(export_source, docx_file, reference_doc=reference_doc, runner=runner)
-    finally:
-        if export_source != markdown_file:
-            export_source.unlink(missing_ok=True)
+    run_pandoc_to_docx(markdown_file, docx_file, reference_doc=reference_doc, runner=runner)
     optimise_docx_tables(docx_file)
 
 
@@ -134,49 +129,3 @@ def _write_minimal_reference_doc(path: Path) -> None:
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         for filename, content in files.items():
             archive.writestr(filename, content)
-
-
-def _docx_ready_markdown(markdown_file: Path) -> Path:
-    markdown = markdown_file.read_text(encoding="utf-8")
-    converted = _convert_action_tables_to_blocks(markdown)
-    if converted == markdown:
-        return markdown_file
-    temp = tempfile.NamedTemporaryFile("w", suffix=".md", encoding="utf-8", delete=False)
-    with temp:
-        temp.write(converted)
-    return Path(temp.name)
-
-
-def _convert_action_tables_to_blocks(markdown: str) -> str:
-    lines = markdown.splitlines()
-    converted: list[str] = []
-    index = 0
-    while index < len(lines):
-        if _is_actions_table_header(lines, index):
-            index += 2
-            while index < len(lines) and lines[index].startswith("|"):
-                cells = [cell.strip() for cell in lines[index].strip("|").split("|")]
-                if len(cells) == 4:
-                    action, owner, due_date, review_note = cells
-                    converted.extend(
-                        [
-                            f"- **{action}**",
-                            f"  - Owner: {owner}",
-                            f"  - Due date: {due_date}",
-                            f"  - Review note: {review_note}",
-                        ]
-                    )
-                index += 1
-            continue
-        converted.append(lines[index])
-        index += 1
-    return "\n".join(converted) + ("\n" if markdown.endswith("\n") else "")
-
-
-def _is_actions_table_header(lines: list[str], index: int) -> bool:
-    if index + 1 >= len(lines):
-        return False
-    return (
-        lines[index].strip() == "| Action | Owner | Due date | Review note |"
-        and lines[index + 1].strip() == "|---|---|---|---|"
-    )

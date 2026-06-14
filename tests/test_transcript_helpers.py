@@ -57,52 +57,48 @@ def test_word_export_writes_docx_using_runner(tmp_path: Path) -> None:
     assert zipfile.is_zipfile(docx_file)
 
 
-def test_docx_ready_markdown_converts_actions_table_without_duplicate_label() -> None:
-    from meeting_minutes_workflow.export.word import _convert_action_tables_to_blocks
-
-    markdown = (
-        "# Actions\n\n"
+@pytest.mark.skipif(shutil.which("pandoc") is None, reason="Pandoc is required for Word export round-trip checks.")
+def test_word_export_preserves_actions_table_and_removes_bookmarks(tmp_path: Path) -> None:
+    actions_markdown = tmp_path / "actions.md"
+    combined_markdown = tmp_path / "combined.md"
+    action_table = (
+        "## Actions\n\n"
         "| Action | Owner | Due date | Review note |\n"
         "|---|---|---|---|\n"
-        "| Follow up | Unclear | Not stated | Needs review. |\n"
+        "| Follow up on room booking | Alex | Next week | Confirmed in the transcript. |\n"
     )
-
-    converted = _convert_action_tables_to_blocks(markdown)
-
-    assert converted.count("Actions") == 1
-    assert "- **Follow up**" in converted
-    assert "  - Owner: Unclear" in converted
-    assert "  - Due date: Not stated" in converted
-    assert "  - Review note: Needs review." in converted
-
-
-@pytest.mark.skipif(shutil.which("pandoc") is None, reason="Pandoc is required for Word export round-trip checks.")
-def test_word_export_round_trips_through_pandoc(tmp_path: Path) -> None:
-    markdown_file = tmp_path / "combined.md"
-    docx_file = tmp_path / "combined.docx"
-    markdown_file.write_text(
+    actions_markdown.write_text(
+        "# Staff Weekly Update - Actions\n\n" + action_table,
+        encoding="utf-8",
+    )
+    combined_markdown.write_text(
         (
             "# Staff Weekly Update\n\n"
-            "## Actions\n\n"
-            "| Action | Owner | Due date | Review note |\n"
-            "|---|---|---|---|\n"
-            "| Follow up on room booking | Alex | Next week | Confirmed in the transcript. |\n"
+            "## Overview\n\nReady.\n\n"
+            + action_table
         ),
         encoding="utf-8",
     )
 
-    export_markdown_to_word(markdown_file, docx_file)
+    for markdown_file in (actions_markdown, combined_markdown):
+        docx_file = tmp_path / markdown_file.name.replace(".md", ".docx")
+        export_markdown_to_word(markdown_file, docx_file)
 
-    result = subprocess.run(
-        ["pandoc", "--from", "docx", "--to", "plain", str(docx_file)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert "Staff Weekly Update" in result.stdout
-    assert "Actions" in result.stdout
-    assert "Follow up on room booking" in result.stdout
-    assert "Owner: Alex" in result.stdout
+        document_xml = _read_docx_document_xml(docx_file)
+        assert "<w:tbl>" in document_xml
+        assert "w:bookmarkStart" not in document_xml
+        assert "w:bookmarkEnd" not in document_xml
+
+        result = subprocess.run(
+            ["pandoc", "--from", "docx", "--to", "plain", str(docx_file)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "Staff Weekly Update" in result.stdout
+        assert "Actions" in result.stdout
+        assert "Follow up on room booking" in result.stdout
+        assert "Alex" in result.stdout
 
 
 def test_docx_extraction_reads_paragraph_text(tmp_path: Path) -> None:
@@ -244,3 +240,8 @@ def _write_minimal_docx(path: Path, paragraphs: list[str]) -> None:
     )
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("word/document.xml", document_xml)
+
+
+def _read_docx_document_xml(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        return archive.read("word/document.xml").decode("utf-8")

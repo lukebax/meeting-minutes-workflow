@@ -5,7 +5,11 @@ import subprocess
 import pytest
 
 from meeting_minutes_workflow.doctor import check_readiness
-from meeting_minutes_workflow.audio import WHISPERKIT_CACHE_PERMISSION_HINT, TranscriptionResult
+from meeting_minutes_workflow.audio import (
+    WHISPERKIT_APPLE_AUDIO_RUNTIME_HINT,
+    WHISPERKIT_CACHE_PERMISSION_HINT,
+    TranscriptionResult,
+)
 from meeting_minutes_workflow.audio import transcribe_audio_with_whisperkit
 from meeting_minutes_workflow.extractors import extract_transcript_text
 from meeting_minutes_workflow.validation import validate_transcript
@@ -174,6 +178,65 @@ def test_whisperkit_cache_permission_failure_is_recorded_in_run_metadata(tmp_pat
     metadata = json.loads((output_folder / "2026-06-12-audio-planning" / "run.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
     assert metadata["errors"] == [WHISPERKIT_CACHE_PERMISSION_HINT]
+
+
+def test_whisperkit_apple_audio_runtime_failure_has_actionable_message(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.m4a"
+    output = tmp_path / "extracted-transcript.txt"
+    source.write_bytes(b"fake audio")
+
+    def failing_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            134,
+            command,
+            stderr=(
+                "IOSurfaceSharedEventAddEventListener failed: 10000003\n"
+                "*** Terminating app due to uncaught exception 'com.apple.coreaudio.avfaudio', "
+                "reason: 'error 1718449215'\n"
+                "4   AVFAudio   -[AVAudioFile setFramePosition:] + 96"
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="local Apple audio runtime failure"):
+        transcribe_audio_with_whisperkit(source, output, runner=failing_runner)
+
+    assert not output.exists()
+
+
+def test_whisperkit_apple_audio_runtime_failure_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+    input_folder = tmp_path / "input"
+    output_folder = tmp_path / "outputs"
+    input_folder.mkdir()
+    output_folder.mkdir()
+    source = input_folder / "meeting.m4a"
+    source.write_bytes(b"fake audio")
+
+    def failing_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            134,
+            command,
+            stderr=(
+                "IOSurfaceSharedEventAddEventListener failed: 10000003\n"
+                "*** Terminating app due to uncaught exception 'com.apple.coreaudio.avfaudio', "
+                "reason: 'error 1718449215'"
+            ),
+        )
+
+    def failing_transcriber(source_file: Path, output_file: Path) -> TranscriptionResult:
+        return transcribe_audio_with_whisperkit(source_file, output_file, runner=failing_runner)
+
+    with pytest.raises(RuntimeError, match="local Apple audio runtime failure"):
+        prepare_transcript_run(
+            input_folder=input_folder,
+            outputs_folder=output_folder,
+            meeting_title="Audio Planning",
+            run_date="2026-06-12",
+            audio_transcriber=failing_transcriber,
+        )
+
+    metadata = json.loads((output_folder / "2026-06-12-audio-planning" / "run.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["errors"] == [WHISPERKIT_APPLE_AUDIO_RUNTIME_HINT]
 
 
 def test_prepare_transcript_run_requires_exactly_one_source_file(tmp_path: Path) -> None:
