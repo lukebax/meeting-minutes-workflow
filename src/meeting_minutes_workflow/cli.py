@@ -38,10 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     finish_parser.add_argument("run_folder", type=Path)
     args = parser.parse_args(argv)
     if args.command == "doctor":
-        for label, readiness in check_readiness().items():
-            display_label = label.replace("_", " ").capitalize()
+        for readiness in check_readiness().values():
             status = "ready" if readiness.ready else "not ready"
-            print(f"{display_label}: {status} - {readiness.detail}")
+            print(f"{readiness.label}: {status} - {readiness.detail}")
         return 0
     if args.command == "prepare-run":
         try:

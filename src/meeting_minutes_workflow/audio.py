@@ -23,6 +23,11 @@ WHISPERKIT_MODEL_PATH = (
     / "openai_whisper-large-v3-v20240930_turbo"
 )
 WHISPERKIT_MODEL_DOWNLOAD_FOLDER = Path.home() / "Library" / "Application Support" / "WhisperKit" / "Models"
+WHISPERKIT_CACHE_PERMISSION_HINT = (
+    "WhisperKit could not write its Apple runtime cache under ~/Library/Caches/whisperkit-cli. "
+    "In Codex, rerun prepare-run with approval for WhisperKit cache access. "
+    "The meeting recording was not sent to an LLM and no transcript output was generated."
+)
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
@@ -47,7 +52,10 @@ def transcribe_audio_with_whisperkit(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     start = timer()
     command = _whisperkit_command(source_file, model_path=model_path, model=model)
-    completed = (runner or _run_command)(command)
+    try:
+        completed = (runner or _run_command)(command)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(_whisperkit_error_message(error)) from error
     transcript = completed.stdout.strip()
     if not transcript:
         raise ValueError("WhisperKit transcription produced no transcript text.")
@@ -106,3 +114,12 @@ def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     if completed.returncode != 0:
         raise subprocess.CalledProcessError(completed.returncode, command, output=stdout, stderr=stderr)
     return completed
+
+
+def _whisperkit_error_message(error: subprocess.CalledProcessError) -> str:
+    stderr = error.stderr if isinstance(error.stderr, str) else ""
+    if "Library/Caches/whisperkit-cli" in stderr and "Operation not permitted" in stderr:
+        return WHISPERKIT_CACHE_PERMISSION_HINT
+    if stderr.strip():
+        return f"WhisperKit transcription failed: {stderr.strip()}"
+    return f"WhisperKit transcription failed with exit code {error.returncode}."

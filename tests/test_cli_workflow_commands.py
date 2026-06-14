@@ -122,7 +122,7 @@ def test_cli_finish_run_records_success_and_generated_files(tmp_path: Path) -> N
 
 
 def test_export_docx_uses_reference_docx_for_table_formatting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from meeting_minutes_workflow.export.pandoc import export_run_markdown_to_docx
+    from meeting_minutes_workflow.export.word import export_run_markdown_to_word
 
     run_folder = _make_run_folder(tmp_path)
     for filename in EXPECTED_MARKDOWN_OUTPUTS:
@@ -134,7 +134,7 @@ def test_export_docx_uses_reference_docx_for_table_formatting(tmp_path: Path, mo
         output_path = Path(command[command.index("--output") + 1])
         _write_docx_with_four_column_table(output_path)
 
-    export_run_markdown_to_docx(run_folder, runner=fake_runner)
+    export_run_markdown_to_word(run_folder, runner=fake_runner)
 
     assert all("--reference-doc" in command for command in commands)
 
@@ -149,6 +149,23 @@ def test_docx_table_optimisation_sets_action_table_column_widths(tmp_path: Path)
 
     document_xml = _read_docx_document_xml(docx_file)
     assert [f'w="{width}"' in document_xml for width in ACTION_TABLE_WIDTHS] == [True, True, True, True]
+
+
+def test_docx_optimisation_normalises_bullet_numbering(tmp_path: Path) -> None:
+    from meeting_minutes_workflow.export.docx_tables import optimise_docx_tables
+
+    docx_file = tmp_path / "bullets.docx"
+    _write_docx_with_symbol_bullets(docx_file)
+
+    optimise_docx_tables(docx_file)
+
+    document_xml = _read_docx_document_xml(docx_file)
+    numbering_xml = _read_docx_numbering_xml(docx_file)
+    assert "• " in document_xml
+    assert "numPr" not in document_xml
+    assert 'val="•"' in numbering_xml
+    assert 'ascii="Arial"' in numbering_xml
+    assert 'val="\uf0b7"' not in numbering_xml
 
 
 def _make_run_folder(tmp_path: Path) -> Path:
@@ -193,6 +210,37 @@ def _write_docx_with_four_column_table(path: Path) -> None:
         archive.writestr("word/document.xml", document_xml)
 
 
+def _write_docx_with_symbol_bullets(path: Path) -> None:
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1001"/></w:numPr></w:pPr><w:r><w:t>Bullet item</w:t></w:r></w:p>
+  </w:body>
+</w:document>
+"""
+    numbering_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="991">
+    <w:lvl w:ilvl="0">
+      <w:numFmt w:val="bullet"/>
+      <w:lvlText w:val="&#61623;"/>
+      <w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:cs="Symbol"/></w:rPr>
+    </w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="1001"><w:abstractNumId w:val="991"/></w:num>
+</w:numbering>
+"""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "")
+        archive.writestr("word/document.xml", document_xml)
+        archive.writestr("word/numbering.xml", numbering_xml)
+
+
 def _read_docx_document_xml(path: Path) -> str:
     with zipfile.ZipFile(path) as archive:
         return archive.read("word/document.xml").decode("utf-8")
+
+
+def _read_docx_numbering_xml(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        return archive.read("word/numbering.xml").decode("utf-8")

@@ -26,7 +26,8 @@ def validate_markdown_outputs(markdown_folder: Path) -> None:
     missing_or_empty = [
         filename
         for filename in EXPECTED_MARKDOWN_OUTPUTS
-        if not (markdown_folder / filename).is_file() or not (markdown_folder / filename).read_text(encoding="utf-8").strip()
+        if not (markdown_folder / filename).is_file()
+        or not (markdown_folder / filename).read_text(encoding="utf-8").strip()
     ]
     if missing_or_empty:
         raise ValueError(f"Expected non-empty Markdown outputs: {', '.join(missing_or_empty)}")

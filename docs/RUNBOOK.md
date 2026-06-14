@@ -25,9 +25,10 @@ Audio transcription uses local WhisperKit CLI on Apple Silicon Macs. Do not send
 ## Before Starting
 
 1. Read [AGENTS.md](../AGENTS.md), [CONTEXT.md](../CONTEXT.md), and this runbook.
-2. Confirm there is exactly one source file in `input/`.
-3. Confirm the user supplied a Meeting Title.
-4. Run:
+2. For a normal meeting run, assume this chat should handle one meeting only. If the user appears to be mixing multiple meetings in one chat, recommend a fresh chat per meeting.
+3. Confirm there is exactly one source file in `input/`.
+4. Confirm the user supplied a Meeting Title.
+5. Run:
 
 ```bash
 .venv/bin/meeting-minutes doctor
@@ -57,6 +58,8 @@ For transcript source material, the command extracts plain text. For meeting rec
 ```
 
 If the source is a meeting recording, confirm `run.json` contains a `transcription` object with the engine, model, model path, and elapsed seconds.
+
+When running inside Codex, WhisperKit may need approval to write Apple runtime cache files under `~/Library/Caches/whisperkit-cli`. If `prepare-run` reports that WhisperKit could not write its Apple runtime cache, rerun `prepare-run` with approval for WhisperKit cache access. This is local runtime cache access only; do not send the meeting recording to an LLM.
 
 ## Generate Markdown Outputs
 
@@ -171,3 +174,15 @@ Report:
 - any manual review concerns
 
 Do not ask the user to run commands. This is a Codex-run workflow.
+
+## First-Time Setup
+
+The user-facing Codex shape is: create a project with **Use an existing folder**, select the repository folder, use one setup chat, then one new chat per meeting.
+
+For a fresh clone, run:
+
+```bash
+python3 scripts/setup_project.py
+```
+
+If Python dependency installation needs network access, request approval and rerun the setup helper. If system tools are missing, explain what is missing and ask before installing Homebrew, Pandoc, WhisperKit CLI, or WhisperKit model files. See [SETUP.md](./SETUP.md).

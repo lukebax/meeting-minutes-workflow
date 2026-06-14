@@ -15,15 +15,32 @@ This workflow turns one transcript file or meeting recording into reviewable mee
 
 The outputs are drafts. Review them before sharing them with anyone else.
 
+## Open the workflow in Codex
+
+After downloading this project from GitHub, open Codex and create a project from it:
+
+1. Open Codex.
+2. Choose **Use an existing folder**.
+3. Select the downloaded `meeting-minutes-workflow` folder.
+
+Use this one Codex project for the workflow. Within that project, use separate chats:
+
+- one setup chat for first-time setup
+- one new chat for each meeting
+
+Using one chat per meeting keeps each Workflow Run separate and reduces the chance that details from one meeting are mixed into another.
+
 ## First-time setup
 
-Before the first run, open this project in Codex and copy this message into Codex:
+Before the first run, start a new setup chat in the Codex project and copy this message into Codex:
 
 ```text
 Please set up this meeting minutes workflow project so it is ready to run.
 ```
 
 Codex should check the local Python environment, install or use the project-local `.venv`, run the workflow tests, check whether Pandoc is available for Word export, and check whether WhisperKit audio transcription is ready. Pandoc is required for `.docx` files. WhisperKit CLI and the local model are required for meeting recordings.
+
+Codex may ask for approval before installing Homebrew tools or downloading large model files. This is expected.
 
 ## Before each run
 
@@ -45,13 +62,17 @@ Supported audio formats for v1:
 
 Audio transcription uses local WhisperKit tooling on Apple Silicon Macs. The meeting recording is transcribed locally into a hidden working transcript before Codex creates the reviewable outputs.
 
+When Codex runs audio transcription, it may ask for approval to let WhisperKit write Apple runtime cache files under your normal user cache folder. Approve this for meeting recordings. This does not send the meeting recording to an LLM.
+
 Do not use the `input` folder as a storage area. Keep it empty unless you are about to run the workflow. After the run is finished, remove your source file from `input` yourself.
 
 The workflow will not delete your source file.
 
 ## Run the workflow in Codex
 
-Open this project in Codex, then copy this message into Codex and replace the meeting title:
+For each meeting, start a new chat in the Codex project. Use one chat for one meeting only.
+
+Copy this message into Codex and replace the meeting title:
 
 ```text
 Please run the meeting minutes workflow using the file in the input folder.
@@ -76,6 +97,8 @@ Codex will then:
 8. Mark the workflow run as successful when all checks pass.
 
 If a run folder with the same date and meeting title already exists, Codex will create a numbered folder such as `2026-06-13-finance-planning-2`.
+
+For the next meeting, empty the `input` folder, put in the next source file, and start another new chat.
 
 ## Find the outputs
 

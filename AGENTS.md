@@ -45,3 +45,17 @@ This repository is a Codex-run meeting minutes workflow. Before making changes, 
 ## Testing Expectations
 
 When implementation exists, run the relevant tests before finishing changes. Focus tests on deterministic behaviour such as input validation, parsing, output folder naming, Markdown validation, Word export checks, and `run.json` status handling.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for `lukebax/meeting-minutes-workflow`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.

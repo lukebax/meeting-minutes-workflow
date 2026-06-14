@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from meeting_minutes_workflow.cli import main
-from meeting_minutes_workflow.export.pandoc import export_markdown_to_docx
+from meeting_minutes_workflow.export.word import export_markdown_to_word
 from meeting_minutes_workflow.extractors import extract_transcript_text
 from meeting_minutes_workflow.run_metadata import update_run_status
 from meeting_minutes_workflow.validation import validate_markdown_outputs
@@ -40,7 +40,7 @@ def test_markdown_validation_requires_expected_outputs(tmp_path: Path) -> None:
         validate_markdown_outputs(markdown_folder)
 
 
-def test_pandoc_export_writes_docx_using_runner(tmp_path: Path) -> None:
+def test_word_export_writes_docx_using_runner(tmp_path: Path) -> None:
     markdown_file = tmp_path / "transcript.md"
     docx_file = tmp_path / "transcript.docx"
     markdown_file.write_text("# Transcript\n\nReady for export.", encoding="utf-8")
@@ -50,7 +50,7 @@ def test_pandoc_export_writes_docx_using_runner(tmp_path: Path) -> None:
         assert command[-2:] == ["--output", str(docx_file)]
         _write_minimal_docx(docx_file, ["Ready for export."])
 
-    export_markdown_to_docx(markdown_file, docx_file, runner=fake_runner)
+    export_markdown_to_word(markdown_file, docx_file, runner=fake_runner)
 
     assert zipfile.is_zipfile(docx_file)
 

@@ -10,10 +10,14 @@ Current implementation status: the transcript path is implemented and tested for
 
 The user-facing flow should be:
 
-1. Put exactly one source file in `input/`.
-2. Ask Codex to run the workflow and provide a short meeting title.
-3. Review the generated files in `outputs/<run>/`.
-4. Empty `input/` manually after the run.
+1. Download the repository from GitHub.
+2. Open Codex and create a project with **Use an existing folder**, selecting the repository folder.
+3. Use one setup chat for first-time setup.
+4. For each meeting, put exactly one source file in `input/`.
+5. Start one new Codex chat for that meeting.
+6. Ask Codex to run the workflow and provide a short meeting title.
+7. Review the generated files in `outputs/<run>/`.
+8. Empty `input/` manually after the run.
 
 The workflow does not delete source files, copy audio into outputs, send audio to an LLM, or manage review/distribution after outputs are produced.
 
@@ -183,7 +187,11 @@ Use deterministic helper commands that Codex can orchestrate:
 - `prepare-run`: create the run folder and extract or transcribe source material
 - validation, assembly, export, and finish commands for later stages
 
-A future setup helper may prepare project-local dependencies and guide larger downloads, but setup is currently documented as a Codex-assisted first-time step rather than an implemented command.
+`WorkflowRun` owns the output folder layout, prepare metadata transitions, validation gates, Word export, finish, and failure marking.
+
+`SourceMaterial` owns source file discovery, transcript-versus-recording classification, source hashing, and preparing the hidden working Transcript.
+
+The setup helper at `scripts/setup_project.py` prepares project-local Python dependencies and reports missing system-level tools. The script is a thin adapter over `meeting_minutes_workflow.first_time_setup`. Codex remains responsible for asking before installing Homebrew tools or downloading large model files.
 
 Readiness should be reported separately for:
 
@@ -215,8 +223,12 @@ First-pass recommendations, with current status:
 Validation follow-ups are still needed for:
 
 - `.docx` extraction quality on real Teams `.docx` transcripts, when a real sample is available
-- Pandoc installation and output quality on target machines
-- full workflow review from a real audio recording through Markdown and Word outputs
+- clean-checkout setup on a second Apple Silicon Mac
+
+Completed validation:
+
+- full workflow review from a real audio recording through Markdown and Word outputs on 2026-06-13
+- first-time setup helper check on the current Apple Silicon Mac
 
 Initial audio spike findings: `faster-whisper` works but is too slow on CPU for this team's long-meeting use case. WhisperKit CLI is now the preferred audio path because the intended users are on Apple Silicon Macs. WhisperKit Large v3 Turbo transcribed a 33 minute 49 second `.m4a` recording in about 100 seconds after first-use setup, with plausible raw transcript quality. Full-file transcription should still report progress and write deterministic working text for Codex cleanup.
 
@@ -241,7 +253,7 @@ Start with deterministic tests:
 - audio transcription metadata is recorded in `run.json`
 - canonical Transcript validation fails below 10 words
 - expected Markdown outputs are non-empty before Word export
-- Pandoc export creates expected non-empty `.docx` files
+- Word export creates expected non-empty `.docx` files when Pandoc is available
 - `run.json` records success, incomplete, and failed statuses
 
 LLM output quality should be guided by prompt files and reviewed manually at first. Avoid brittle tests that assert exact LLM prose.
@@ -256,6 +268,8 @@ LLM output quality should be guided by prompt files and reviewed manually at fir
   README.md
   LICENSE
   pyproject.toml
+  scripts/
+    setup_project.py
   input/
     .gitkeep
   outputs/
@@ -267,10 +281,20 @@ LLM output quality should be guided by prompt files and reviewed manually at fir
     actions.md
     decisions.md
   docs/
+    SETUP.md
     PROJECT_PLAN.md
+    RUNBOOK.md
+    IMPLEMENTATION_RESEARCH.md
+    agents/
     adr/
   src/
     meeting_minutes_workflow/
+      first_time_setup.py
+      source_material.py
+      workflow_run.py
+      setup_readiness.py
+      run_metadata.py
+      export/
   tests/
 ```
 
@@ -299,7 +323,6 @@ Prompt files are instruction files. `combined.md` is assembled deterministically
 
 ## Next Steps
 
-1. Run the full workflow end to end on a real `.m4a` meeting recording and inspect the generated Markdown and Word outputs.
-2. Add or document setup support for installing `whisperkit-cli` with Homebrew and preparing the WhisperKit Large v3 Turbo model from a clean checkout.
-3. Validate `.docx` extraction against a real Teams-style `.docx` transcript when one becomes available.
-4. Consider whether speaker diarisation should be added after the core audio workflow is stable.
+1. Validate setup from a clean checkout on a second Apple Silicon Mac.
+2. Validate `.docx` extraction against a real Teams-style `.docx` transcript when one becomes available.
+3. Consider whether speaker diarisation should be added after the core audio workflow is stable.

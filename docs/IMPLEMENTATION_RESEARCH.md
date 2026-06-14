@@ -63,15 +63,25 @@ src/
     combined.py
     commands.py
     doctor.py
+    first_time_setup.py
     run_metadata.py
+    setup_readiness.py
+    source_material.py
     validation.py
     workflow.py
+    workflow_run.py
     extractors/
       __init__.py
     export/
       __init__.py
       docx_tables.py
       pandoc.py
+      word.py
+scripts/
+  setup_project.py
+docs/
+  SETUP.md
+  agents/
 tests/
 ```
 
@@ -179,18 +189,20 @@ brew install pandoc
 
 Do not install Pandoc silently. Setup should explain that Word export requires Pandoc and ask for user approval before installing it.
 
-Initial export command shape:
+Implemented export command shape:
 
 ```text
-pandoc --from gfm --to docx --standalone --output output.docx input.md
+pandoc --from gfm --to docx --standalone --reference-doc reference.docx input.md --output output.docx
 ```
+
+The Word export module generates a minimal reference `.docx` in the system temporary directory, converts action tables into Word-friendly action blocks for `.docx` only, and post-processes generated `.docx` files so bullet lists render visibly in Word. The Pandoc module is the local command adapter. Markdown remains canonical.
 
 Validate after export:
 
 - expected `.docx` file exists
 - file size is greater than zero
 
-Do not attempt deep Word rendering validation in v1.
+Automated validation remains structural in v1. Manual review should inspect `docx/combined.docx` for obvious readability problems after real workflow runs.
 
 ## Local Audio Transcription
 
@@ -276,7 +288,9 @@ Accuracy should still be prioritized over speed for real meeting use, but Apple-
 
 Implementation update: WhisperKit CLI is integrated into `prepare-run` for supported audio source material. The helper writes `.work/extracted-transcript.txt`, records engine, model, model path, and elapsed seconds in `run.json`, and prints elapsed-time progress while transcription is running.
 
-Next audio validation step: run the full workflow end to end from an audio recording through Markdown and Word outputs. Do not commit recordings or generated transcripts from real meetings.
+Operational note: in the Codex managed sandbox, WhisperKit may abort if Apple runtime cache writes under `~/Library/Caches/whisperkit-cli` are blocked. The workflow reports this as an actionable local cache-permission error. Rerunning `prepare-run` with approval for WhisperKit cache access resolves the issue without sending audio to an LLM.
+
+Audio validation update, 2026-06-13: the full workflow ran successfully end to end from the real `.m4a` recording through cleaned Transcript, summary Markdown, combined output, Word export, and final `run.json` status. The raw WhisperKit transcript was plausible for meeting use after Codex cleanup. The main remaining audio limitation is the lack of speaker diarisation, so Actions and speaker-linked details must remain conservative when attribution is unclear.
 
 ### Alternatives
 
@@ -347,15 +361,15 @@ Audio transcription: not ready - WhisperKit CLI found, model not found at the co
 Word export: not ready - pandoc not found
 ```
 
-First-time setup should:
+First-time setup is handled by `scripts/setup_project.py` plus Codex approval for system-level work. The setup helper should:
 
 - create `.venv`
 - install project dependencies
 - run `doctor`
-- offer to install Pandoc if missing
-- offer to install `whisperkit-cli` and prepare the WhisperKit Large v3 Turbo model if audio support is being set up
+- report whether Pandoc is missing
+- report whether `whisperkit-cli` or the WhisperKit Large v3 Turbo model is missing
 
-Do not silently install system-level tools.
+Codex should ask before installing Homebrew tools or preparing large model files. Do not silently install system-level tools.
 
 ## Testing Priorities
 
@@ -374,7 +388,7 @@ Create tests before or alongside implementation for:
 - transcript minimum word validation
 - Markdown file validation
 - Pandoc missing produces a clear doctor failure
-- Pandoc export creates non-empty `.docx` when Pandoc is available
+- Word export creates non-empty `.docx` when Pandoc is available
 - audio source material invokes WhisperKit CLI and writes `.work/extracted-transcript.txt`
 - audio transcription metadata is recorded in `run.json`
 - failed audio transcription writes a failed `run.json` without claiming generated transcript files
@@ -386,23 +400,26 @@ Keep Pandoc-dependent tests isolated from the local machine state. Unit tests sh
 As of the current implementation pass:
 
 - `pyproject.toml` and the `src/` package layout exist.
-- Deterministic helpers exist for input discovery, output folder numbering, source hashing, transcript extraction, local WhisperKit audio transcription, validation, combined-output assembly, Word export, `doctor`, and `run.json`.
+- Deterministic helpers exist for Workflow Run layout, prepare metadata, and stage gates; typed Source Material intake; transcript extraction; local WhisperKit audio transcription; setup readiness; validation; combined-output assembly; Word export; `doctor`; and `run.json`.
+- Readiness checks carry user-facing display labels with their readiness facts so setup and `doctor` do not duplicate label knowledge.
+- A first-time setup helper exists at `scripts/setup_project.py`, with package implementation in `meeting_minutes_workflow.first_time_setup`.
 - The command runbook lives in [RUNBOOK.md](./RUNBOOK.md).
+- First-time setup instructions live in [SETUP.md](./SETUP.md), and the non-technical user flow lives in [HOW_TO_USE.md](../HOW_TO_USE.md).
 - The transcript path has been proven end to end on a `.txt` transcript.
 - The transcript path has been proven end to end on a synthetic Teams-style `.vtt` transcript.
 - The `.vtt` extractor removes timestamp and metadata noise, preserves speaker labels, and now removes obvious rolling caption fragments while preserving genuine repeated statements.
 - Basic `.docx` extraction exists, but real Teams-style `.docx` transcript validation remains open until a real sample is available.
-- Audio transcription with WhisperKit CLI is implemented in `prepare-run` and has been tested on a real `.m4a` recording through working transcript extraction.
+- Audio transcription with WhisperKit CLI is implemented in `prepare-run` and has been tested on a real `.m4a` recording through cleaned Transcript, summary Markdown, combined output, Word export, and final successful `run.json`.
 
 ## Decisions and Follow-ups
 
-- Whether the full audio workflow output quality is acceptable after Codex cleanup and summary generation.
 - Whether additional progress detail is needed for very long recordings.
 - Whether the current `.docx` extraction approach is sufficient for real Teams `.docx` transcripts when a sample is available.
-- Whether Pandoc output quality is acceptable without a reference `.docx`.
+- Whether the current generated reference `.docx` is sufficient on target machines or should later become a custom organisation template.
+- Whether setup should eventually become a first-class CLI command instead of a repository script.
 
 ## Immediate Next Build Step
 
-Run the full workflow end to end from a real audio recording through cleaned Transcript, summary Markdown, combined output, Word export, and final `run.json` status. Review the outputs for transcription cleanup quality, unsupported action/decision claims, and Word readability.
+Validate setup from a clean checkout on a second Apple Silicon Mac, including the Codex project shape: **Use an existing folder**, one setup chat, then one new chat per meeting.
 
 Keep real Teams-style `.docx` transcript validation as a follow-up when a representative file is available.

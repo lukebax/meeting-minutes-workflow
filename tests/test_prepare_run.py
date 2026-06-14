@@ -1,10 +1,12 @@
 from pathlib import Path
 import json
+import subprocess
 
 import pytest
 
 from meeting_minutes_workflow.doctor import check_readiness
-from meeting_minutes_workflow.audio import TranscriptionResult
+from meeting_minutes_workflow.audio import WHISPERKIT_CACHE_PERMISSION_HINT, TranscriptionResult
+from meeting_minutes_workflow.audio import transcribe_audio_with_whisperkit
 from meeting_minutes_workflow.extractors import extract_transcript_text
 from meeting_minutes_workflow.validation import validate_transcript
 from meeting_minutes_workflow.workflow import prepare_transcript_run
@@ -118,6 +120,62 @@ def test_prepare_transcript_run_records_failed_audio_transcription(tmp_path: Pat
     assert metadata["errors"] == ["WhisperKit failed."]
 
 
+def test_whisperkit_cache_permission_failure_has_actionable_message(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.m4a"
+    output = tmp_path / "extracted-transcript.txt"
+    source.write_bytes(b"fake audio")
+
+    def failing_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            134,
+            command,
+            stderr=(
+                "filesystem error: in create_directories: Operation not permitted "
+                '["/Users/example/Library/Caches/whisperkit-cli/cache.bundle"]'
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="WhisperKit could not write its Apple runtime cache"):
+        transcribe_audio_with_whisperkit(source, output, runner=failing_runner)
+
+    assert not output.exists()
+
+
+def test_whisperkit_cache_permission_failure_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+    input_folder = tmp_path / "input"
+    output_folder = tmp_path / "outputs"
+    input_folder.mkdir()
+    output_folder.mkdir()
+    source = input_folder / "meeting.m4a"
+    source.write_bytes(b"fake audio")
+
+    def failing_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            134,
+            command,
+            stderr=(
+                "filesystem error: in create_directories: Operation not permitted "
+                '["/Users/example/Library/Caches/whisperkit-cli/cache.bundle"]'
+            ),
+        )
+
+    def failing_transcriber(source_file: Path, output_file: Path) -> TranscriptionResult:
+        return transcribe_audio_with_whisperkit(source_file, output_file, runner=failing_runner)
+
+    with pytest.raises(RuntimeError, match="WhisperKit could not write its Apple runtime cache"):
+        prepare_transcript_run(
+            input_folder=input_folder,
+            outputs_folder=output_folder,
+            meeting_title="Audio Planning",
+            run_date="2026-06-12",
+            audio_transcriber=failing_transcriber,
+        )
+
+    metadata = json.loads((output_folder / "2026-06-12-audio-planning" / "run.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["errors"] == [WHISPERKIT_CACHE_PERMISSION_HINT]
+
+
 def test_prepare_transcript_run_requires_exactly_one_source_file(tmp_path: Path) -> None:
     input_folder = tmp_path / "input"
     output_folder = tmp_path / "outputs"
@@ -212,14 +270,14 @@ def test_doctor_reports_transcript_ready_separately_from_word_export() -> None:
 def test_doctor_reports_audio_ready_when_whisperkit_and_model_are_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import meeting_minutes_workflow.doctor as doctor
+    import meeting_minutes_workflow.setup_readiness as setup_readiness
 
     model_path = tmp_path / "openai_whisper-large-v3-v20240930_turbo"
     model_path.mkdir()
-    monkeypatch.setattr(doctor, "WHISPERKIT_MODEL_PATH", model_path)
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/fake/bin/{name}")
+    monkeypatch.setattr(setup_readiness, "WHISPERKIT_MODEL_PATH", model_path)
+    monkeypatch.setattr(setup_readiness.shutil, "which", lambda name: f"/fake/bin/{name}")
 
-    readiness = doctor.check_readiness()
+    readiness = setup_readiness.check_workflow_readiness()
 
     assert readiness["audio_transcription"].ready is True
     assert "WhisperKit CLI found" in readiness["audio_transcription"].detail

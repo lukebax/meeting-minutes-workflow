@@ -27,6 +27,12 @@ def optimise_docx_tables(docx_file: Path) -> None:
                 _set_table_widths(table, ACTION_TABLE_WIDTHS)
                 changed = True
 
+        if _inline_visible_bullets(root, entries):
+            changed = True
+
+        if _normalise_bullet_numbering(entries):
+            changed = True
+
         if not changed:
             return
 
@@ -66,6 +72,97 @@ def _set_table_widths(table: ElementTree.Element, widths: list[int]) -> None:
             cell_width = _child(cell_properties, "tcW")
             cell_width.set(f"{{{WORD_NS}}}type", "dxa")
             cell_width.set(f"{{{WORD_NS}}}w", str(widths[index]))
+
+
+def _normalise_bullet_numbering(entries: dict[str, bytes]) -> bool:
+    numbering_xml = entries.get("word/numbering.xml")
+    if numbering_xml is None:
+        return False
+
+    root = ElementTree.fromstring(numbering_xml)
+    changed = False
+    for level in root.findall(".//w:lvl", NS):
+        number_format = level.find("w:numFmt", NS)
+        level_text = level.find("w:lvlText", NS)
+        if (
+            number_format is None
+            or level_text is None
+            or number_format.get(f"{{{WORD_NS}}}val") != "bullet"
+        ):
+            continue
+
+        current_marker = level_text.get(f"{{{WORD_NS}}}val", "")
+        if current_marker != "\u2022":
+            level_text.set(f"{{{WORD_NS}}}val", "\u2022")
+            changed = True
+
+        run_properties = _child(level, "rPr")
+        fonts = _child(run_properties, "rFonts")
+        for attribute in ("ascii", "hAnsi", "cs"):
+            qualified_attribute = f"{{{WORD_NS}}}{attribute}"
+            if fonts.get(qualified_attribute) != "Arial":
+                fonts.set(qualified_attribute, "Arial")
+                changed = True
+
+    if changed:
+        entries["word/numbering.xml"] = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+    return changed
+
+
+def _inline_visible_bullets(document_root: ElementTree.Element, entries: dict[str, bytes]) -> bool:
+    bullet_number_ids = _bullet_number_ids(entries)
+    if not bullet_number_ids:
+        return False
+
+    changed = False
+    for paragraph in document_root.findall(".//w:p", NS):
+        properties = paragraph.find("w:pPr", NS)
+        if properties is None:
+            continue
+        numbering = properties.find("w:numPr", NS)
+        if numbering is None:
+            continue
+        number_id = numbering.find("w:numId", NS)
+        if number_id is None or number_id.get(f"{{{WORD_NS}}}val") not in bullet_number_ids:
+            continue
+
+        properties.remove(numbering)
+        bullet_run = ElementTree.Element(f"{{{WORD_NS}}}r")
+        bullet_text = ElementTree.SubElement(bullet_run, f"{{{WORD_NS}}}t")
+        bullet_text.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        bullet_text.text = "\u2022 "
+        insert_at = 1 if len(paragraph) and paragraph[0] is properties else 0
+        paragraph.insert(insert_at, bullet_run)
+        changed = True
+    return changed
+
+
+def _bullet_number_ids(entries: dict[str, bytes]) -> set[str]:
+    numbering_xml = entries.get("word/numbering.xml")
+    if numbering_xml is None:
+        return set()
+
+    root = ElementTree.fromstring(numbering_xml)
+    bullet_abstract_ids = set()
+    for abstract in root.findall("w:abstractNum", NS):
+        abstract_id = abstract.get(f"{{{WORD_NS}}}abstractNumId")
+        if abstract_id is None:
+            continue
+        if any(_is_bullet_level(level) for level in abstract.findall("w:lvl", NS)):
+            bullet_abstract_ids.add(abstract_id)
+
+    bullet_number_ids = set()
+    for number in root.findall("w:num", NS):
+        abstract = number.find("w:abstractNumId", NS)
+        number_id = number.get(f"{{{WORD_NS}}}numId")
+        if abstract is not None and number_id is not None and abstract.get(f"{{{WORD_NS}}}val") in bullet_abstract_ids:
+            bullet_number_ids.add(number_id)
+    return bullet_number_ids
+
+
+def _is_bullet_level(level: ElementTree.Element) -> bool:
+    number_format = level.find("w:numFmt", NS)
+    return number_format is not None and number_format.get(f"{{{WORD_NS}}}val") == "bullet"
 
 
 def _child(parent: ElementTree.Element, tag: str, *, before: ElementTree.Element | None = None) -> ElementTree.Element:

@@ -2,22 +2,29 @@ from __future__ import annotations
 
 import re
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from xml.etree import ElementTree
 
 
 SUPPORTED_TRANSCRIPT_EXTENSIONS = {".txt", ".md", ".vtt", ".docx"}
+TranscriptExtractor = Callable[[Path], str]
+
+TRANSCRIPT_EXTRACTORS: dict[str, TranscriptExtractor] = {
+    ".txt": lambda source_file: source_file.read_text(encoding="utf-8"),
+    ".md": lambda source_file: source_file.read_text(encoding="utf-8"),
+    ".vtt": lambda source_file: _extract_vtt(source_file.read_text(encoding="utf-8")),
+    ".docx": lambda source_file: _extract_docx(source_file),
+}
 
 
 def extract_transcript_text(source_file: Path) -> str:
     extension = source_file.suffix.lower()
-    if extension in {".txt", ".md"}:
-        return source_file.read_text(encoding="utf-8")
-    if extension == ".vtt":
-        return _extract_vtt(source_file.read_text(encoding="utf-8"))
-    if extension == ".docx":
-        return _extract_docx(source_file)
-    raise ValueError(f"Unsupported source file extension: {source_file.suffix}")
+    try:
+        extractor = TRANSCRIPT_EXTRACTORS[extension]
+    except KeyError as error:
+        raise ValueError(f"Unsupported source file extension: {source_file.suffix}") from error
+    return extractor(source_file)
 
 
 def _extract_vtt(vtt_text: str) -> str:
