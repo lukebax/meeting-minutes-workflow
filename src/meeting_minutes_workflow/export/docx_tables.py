@@ -11,6 +11,8 @@ WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": WORD_NS}
 ACTION_TABLE_WIDTHS = [3600, 1000, 1300, 3000]
 
+ElementTree.register_namespace("w", WORD_NS)
+
 
 def optimise_docx_tables(docx_file: Path) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from meeting_minutes_workflow.cli import main
-from meeting_minutes_workflow.validation import EXPECTED_MARKDOWN_OUTPUTS
+from meeting_minutes_workflow.validation import EXPECTED_DOCX_OUTPUTS, EXPECTED_MARKDOWN_OUTPUTS, validate_docx_outputs
 
 
 def test_cli_validate_transcript_accepts_canonical_transcript(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -59,6 +59,9 @@ def test_cli_export_docx_exports_all_markdown_outputs(tmp_path: Path, monkeypatc
     fake_pandoc = fake_bin / "pandoc"
     fake_pandoc.write_text(
         f"""#!/bin/sh
+if [ "$1" = "--from" ] && [ "$2" = "docx" ]; then
+  exit 0
+fi
 while [ "$1" != "" ]; do
   if [ "$1" = "--output" ]; then
     shift
@@ -106,11 +109,17 @@ def test_cli_assemble_combined_copies_sections_from_separate_outputs(tmp_path: P
     )
 
 
-def test_cli_finish_run_records_success_and_generated_files(tmp_path: Path) -> None:
+def test_cli_finish_run_records_success_and_generated_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run_folder = _make_run_folder(tmp_path)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_pandoc = fake_bin / "pandoc"
+    fake_pandoc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_pandoc.chmod(fake_pandoc.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", str(fake_bin))
     for filename in EXPECTED_MARKDOWN_OUTPUTS:
         (run_folder / "markdown" / filename).write_text(f"# {filename}\n\nReady.", encoding="utf-8")
-        (run_folder / "docx" / filename.replace(".md", ".docx")).write_bytes(b"docx")
+        _write_docx_with_four_column_table(run_folder / "docx" / filename.replace(".md", ".docx"))
 
     exit_code = main(["finish-run", str(run_folder)])
 
@@ -166,6 +175,38 @@ def test_docx_optimisation_normalises_bullet_numbering(tmp_path: Path) -> None:
     assert 'val="•"' in numbering_xml
     assert 'ascii="Arial"' in numbering_xml
     assert 'val="\uf0b7"' not in numbering_xml
+
+
+def test_docx_optimisation_preserves_word_namespace_prefix(tmp_path: Path) -> None:
+    from meeting_minutes_workflow.export.docx_tables import optimise_docx_tables
+
+    docx_file = tmp_path / "bullets.docx"
+    _write_docx_with_symbol_bullets(docx_file)
+
+    optimise_docx_tables(docx_file)
+
+    document_xml = _read_docx_document_xml(docx_file)
+    numbering_xml = _read_docx_numbering_xml(docx_file)
+    assert "<w:document" in document_xml
+    assert "<w:numbering" in numbering_xml
+    assert "ns0:" not in document_xml
+    assert "ns0:" not in numbering_xml
+
+
+def test_docx_validation_rejects_pandoc_unreadable_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    docx_folder = tmp_path / "docx"
+    fake_bin = tmp_path / "bin"
+    docx_folder.mkdir()
+    fake_bin.mkdir()
+    fake_pandoc = fake_bin / "pandoc"
+    fake_pandoc.write_text("#!/bin/sh\nprintf 'could not read docx\\n' >&2\nexit 63\n", encoding="utf-8")
+    fake_pandoc.chmod(fake_pandoc.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", str(fake_bin))
+    for filename in EXPECTED_DOCX_OUTPUTS:
+        _write_docx_with_four_column_table(docx_folder / filename)
+
+    with pytest.raises(ValueError, match="Pandoc-readable Word outputs"):
+        validate_docx_outputs(docx_folder)
 
 
 def _make_run_folder(tmp_path: Path) -> Path:

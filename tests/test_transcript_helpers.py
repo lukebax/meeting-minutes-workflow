@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import stat
+import subprocess
 import sys
 import types
 import zipfile
@@ -53,6 +55,54 @@ def test_word_export_writes_docx_using_runner(tmp_path: Path) -> None:
     export_markdown_to_word(markdown_file, docx_file, runner=fake_runner)
 
     assert zipfile.is_zipfile(docx_file)
+
+
+def test_docx_ready_markdown_converts_actions_table_without_duplicate_label() -> None:
+    from meeting_minutes_workflow.export.word import _convert_action_tables_to_blocks
+
+    markdown = (
+        "# Actions\n\n"
+        "| Action | Owner | Due date | Review note |\n"
+        "|---|---|---|---|\n"
+        "| Follow up | Unclear | Not stated | Needs review. |\n"
+    )
+
+    converted = _convert_action_tables_to_blocks(markdown)
+
+    assert converted.count("Actions") == 1
+    assert "- **Follow up**" in converted
+    assert "  - Owner: Unclear" in converted
+    assert "  - Due date: Not stated" in converted
+    assert "  - Review note: Needs review." in converted
+
+
+@pytest.mark.skipif(shutil.which("pandoc") is None, reason="Pandoc is required for Word export round-trip checks.")
+def test_word_export_round_trips_through_pandoc(tmp_path: Path) -> None:
+    markdown_file = tmp_path / "combined.md"
+    docx_file = tmp_path / "combined.docx"
+    markdown_file.write_text(
+        (
+            "# Staff Weekly Update\n\n"
+            "## Actions\n\n"
+            "| Action | Owner | Due date | Review note |\n"
+            "|---|---|---|---|\n"
+            "| Follow up on room booking | Alex | Next week | Confirmed in the transcript. |\n"
+        ),
+        encoding="utf-8",
+    )
+
+    export_markdown_to_word(markdown_file, docx_file)
+
+    result = subprocess.run(
+        ["pandoc", "--from", "docx", "--to", "plain", str(docx_file)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Staff Weekly Update" in result.stdout
+    assert "Actions" in result.stdout
+    assert "Follow up on room booking" in result.stdout
+    assert "Owner: Alex" in result.stdout
 
 
 def test_docx_extraction_reads_paragraph_text(tmp_path: Path) -> None:

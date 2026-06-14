@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import zipfile
 from pathlib import Path
 
 
@@ -41,3 +44,32 @@ def validate_docx_outputs(docx_folder: Path) -> None:
     ]
     if missing_or_empty:
         raise ValueError(f"Expected non-empty Word outputs: {', '.join(missing_or_empty)}")
+
+    unreadable_packages = [
+        filename
+        for filename in EXPECTED_DOCX_OUTPUTS
+        if not zipfile.is_zipfile(docx_folder / filename)
+    ]
+    if unreadable_packages:
+        raise ValueError(f"Expected valid Word packages: {', '.join(unreadable_packages)}")
+
+    pandoc = shutil.which("pandoc")
+    if pandoc is None:
+        return
+
+    unreadable_by_pandoc: list[str] = []
+    for filename in EXPECTED_DOCX_OUTPUTS:
+        docx_file = docx_folder / filename
+        result = subprocess.run(
+            [pandoc, "--from", "docx", "--to", "plain", str(docx_file)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            message = result.stderr.strip() or "Pandoc could not read the file."
+            unreadable_by_pandoc.append(f"{filename} ({message})")
+
+    if unreadable_by_pandoc:
+        raise ValueError(f"Expected Pandoc-readable Word outputs: {', '.join(unreadable_by_pandoc)}")

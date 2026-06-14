@@ -153,8 +153,6 @@ def _convert_action_tables_to_blocks(markdown: str) -> str:
     index = 0
     while index < len(lines):
         if _is_actions_table_header(lines, index):
-            converted.append("**Actions**")
-            converted.append("")
             index += 2
             while index < len(lines) and lines[index].startswith("|"):
                 cells = [cell.strip() for cell in lines[index].strip("|").split("|")]

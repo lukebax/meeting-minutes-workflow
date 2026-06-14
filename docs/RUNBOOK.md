@@ -127,6 +127,8 @@ The Markdown files remain canonical. Word files are convenience exports.
 
 For Word readability, action tables may be exported as action blocks in `.docx`. This does not change canonical `actions.md`.
 
+The export step validates that each `.docx` is a valid Word package and, when Pandoc is available, that Pandoc can read it back. If export or finish reports `Expected Pandoc-readable Word outputs`, rerun `export-docx` once after confirming Pandoc readiness. If the error repeats, inspect the named `.docx` file before reporting the run as complete.
+
 ## Finish Run
 
 When Markdown validation and Word export have succeeded, run:
